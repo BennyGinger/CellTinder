@@ -1,0 +1,21 @@
+[project]
+name = "celltinder"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Benoit Roux", email = "benoit.roux@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.1",
+    "pandas>=2.2.3",
+    "pyqt6>=6.8.1",
+]
+
+[project.scripts]
+celltinder = "celltinder:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
