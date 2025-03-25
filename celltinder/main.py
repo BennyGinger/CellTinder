@@ -2,14 +2,14 @@ import sys
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
-from celltinder.backend.load_data import LoadData
+from celltinder.backend.data_loader import DataLoader
 from celltinder.gui.views.histo_view import HistogramView
 from celltinder.gui.controllers.histo_control import HistogramController
 
 
 def main(csv_path: Path) -> None:
     app = QApplication(sys.argv)
-    data = LoadData(csv_path)
+    data = DataLoader(csv_path)
     view = HistogramView()
     
     controller = HistogramController(data, view)
