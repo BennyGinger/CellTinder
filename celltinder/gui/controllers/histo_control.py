@@ -50,5 +50,6 @@ class HistogramController:
             
         # Add a new column to the DataFrame based on the threshold values
         self.model.df[column_name] = self.model.df['ratio'].apply(lambda x: lower_val < x < upper_val)
-        self.model.save_csv(column_name)
+        self.model.update_thresholds(lower_val, upper_val, column_name)
+        self.model.save_csv()
         # Optionally: move to the next step in the workflow
