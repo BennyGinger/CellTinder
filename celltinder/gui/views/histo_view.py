@@ -99,6 +99,7 @@ class HistogramView(QMainWindow):
         ax.set_yscale('log', base=10)
         self.canvas.draw()
 
+    # TODO: allow more time to type several digit numbers, so than the default value is not triggered 
     def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
         """Extract the threshold values from the input fields. If invalid, reset to default. It will also enforce that lower is less than upper."""
         
