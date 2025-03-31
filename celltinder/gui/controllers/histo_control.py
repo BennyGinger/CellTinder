@@ -16,8 +16,8 @@ class HistogramController:
         self.view.update_count(initial_count)
         
         # Connect view signals to controller methods
-        self.view.lower_edit.textChanged.connect(self.on_threshold_change)
-        self.view.upper_edit.textChanged.connect(self.on_threshold_change)
+        self.view.lower_edit.editingFinished.connect(self.on_threshold_change)
+        self.view.upper_edit.editingFinished.connect(self.on_threshold_change)
         self.view.next_button.clicked.connect(self.on_next_pressed)
         
         # Draw the initial plot

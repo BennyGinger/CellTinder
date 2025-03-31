@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -8,7 +9,9 @@ from matplotlib.figure import Figure
 class HistogramView(QMainWindow):
     """Main window for the histogram GUI."""
     
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the HistogramView with default threshold values."""
+        
         super().__init__()
         self.setWindowTitle("Histogram GUI")
         self.main_widget = QWidget()
@@ -32,7 +35,7 @@ class HistogramView(QMainWindow):
         self._create_controls()
         # Create the Next button
         self._create_next_button()
-
+        
     def _create_controls(self):
         """Create the controls for setting thresholds and displaying cell count."""
         
@@ -44,6 +47,8 @@ class HistogramView(QMainWindow):
         self.lower_edit = QLineEdit()
         self.lower_edit.setFixedWidth(120)
         self.lower_edit.setStyleSheet("color: red;")
+        # Use QDoubleValidator to allow only valid numbers (0.0 to 1000.0, 2 decimal places)
+        self.lower_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
         self.lower_layout.addWidget(self.lower_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.lower_layout.addWidget(self.lower_edit, alignment=Qt.AlignmentFlag.AlignCenter)
         
@@ -53,6 +58,8 @@ class HistogramView(QMainWindow):
         self.upper_edit = QLineEdit()
         self.upper_edit.setFixedWidth(120)
         self.upper_edit.setStyleSheet("color: green;")
+        # Set validator for the upper threshold as well
+        self.upper_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
         self.upper_layout.addWidget(self.upper_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.upper_layout.addWidget(self.upper_edit, alignment=Qt.AlignmentFlag.AlignCenter)
         
@@ -99,7 +106,6 @@ class HistogramView(QMainWindow):
         ax.set_yscale('log', base=10)
         self.canvas.draw()
 
-    # TODO: allow more time to type several digit numbers, so than the default value is not triggered 
     def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
         """Extract the threshold values from the input fields. If invalid, reset to default. It will also enforce that lower is less than upper."""
         
@@ -115,15 +121,10 @@ class HistogramView(QMainWindow):
             self.upper_edit.setText(str(upper_val))  # Update text to default
         
         # Enforce that lower is less than upper
-        sender = self.sender()
-        match sender:
-            case self.lower_edit:
-                if lower_val >= upper_val:
-                    lower_val = upper_val - 0.01
-                    self.lower_edit.setText(str(round(lower_val, 2)))
-            case self.upper_edit:
-                if upper_val <= lower_val:
-                    upper_val = lower_val + 0.01
-                    self.upper_edit.setText(str(round(upper_val, 2)))
+        if lower_val >= upper_val:
+            # Adjust upper value to be slightly greater than lower value
+            upper_val = lower_val + 0.01
+            self.upper_edit.setText(str(round(upper_val, 2)))
         
         return lower_val, upper_val
+
