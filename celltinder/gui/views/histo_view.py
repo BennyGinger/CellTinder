@@ -1,22 +1,20 @@
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
+from gui.views.base_view import BaseView
 
-class HistogramView(QMainWindow):
-    """Main window for the histogram GUI."""
+
+class HistogramView(BaseView):
+    """View class for the histogram GUI."""
     
     def __init__(self) -> None:
-        """Initialize the HistogramView with default threshold values."""
+        """Initialize the HistogramView with a layout and controls."""
         
-        super().__init__()
-        self.setWindowTitle("Histogram GUI")
-        self.main_widget = QWidget()
-        self.setCentralWidget(self.main_widget)
-        self.main_layout = QVBoxLayout(self.main_widget)
+        super().__init__("Histogram GUI")
         
         # Set up the matplotlib figure and canvas
         self.figure = Figure(figsize=(6, 4))
@@ -31,13 +29,16 @@ class HistogramView(QMainWindow):
         toolbar_layout.addStretch()
         self.main_layout.addLayout(toolbar_layout)
         
-        # Create controls for thresholds and cell count display
+        # Create the threshold and cell count controls
         self._create_controls()
-        # Create the Next button
-        self._create_next_button()
         
-    def _create_controls(self):
-        """Create the controls for setting thresholds and displaying cell count."""
+        # Create the Next button in the bottom bar
+        self.next_button = QPushButton("Next")
+        self.create_bottom_bar([self.next_button], alignment=Qt.AlignmentFlag.AlignRight)
+
+    
+    def _create_controls(self) -> None:
+        """Create controls for threshold inputs and cell count display."""
         
         self.controls_layout = QHBoxLayout()
         
@@ -47,7 +48,6 @@ class HistogramView(QMainWindow):
         self.lower_edit = QLineEdit()
         self.lower_edit.setFixedWidth(120)
         self.lower_edit.setStyleSheet("color: red;")
-        # Use QDoubleValidator to allow only valid numbers (0.0 to 1000.0, 2 decimal places)
         self.lower_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
         self.lower_layout.addWidget(self.lower_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.lower_layout.addWidget(self.lower_edit, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -58,7 +58,6 @@ class HistogramView(QMainWindow):
         self.upper_edit = QLineEdit()
         self.upper_edit.setFixedWidth(120)
         self.upper_edit.setStyleSheet("color: green;")
-        # Set validator for the upper threshold as well
         self.upper_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
         self.upper_layout.addWidget(self.upper_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.upper_layout.addWidget(self.upper_edit, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -73,28 +72,18 @@ class HistogramView(QMainWindow):
         self.count_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.count_layout.addWidget(self.count_display, alignment=Qt.AlignmentFlag.AlignCenter)
         
-        # Combine layouts
+        # Combine into the controls layout
         self.controls_layout.addLayout(self.lower_layout)
         self.controls_layout.addLayout(self.upper_layout)
         self.controls_layout.addLayout(self.count_layout)
         self.main_layout.addLayout(self.controls_layout)
     
-    def _create_next_button(self):
-        """Create the 'Next' button."""
-        
-        self.button_layout = QHBoxLayout()
-        self.button_layout.addStretch()
-        self.next_button = QPushButton("Next")
-        self.button_layout.addWidget(self.next_button)
-        self.main_layout.addLayout(self.button_layout)
-
-    # Public methods to update UI elements
+    # Public methods for updating UI elements
     def update_count(self, count: int) -> None:
         self.count_display.setText(str(count))
-
+    
     def update_plot(self, lower_val: float, upper_val: float, ratios: list) -> None:
         """Update the histogram plot with new threshold values."""
-        
         self.figure.clear()
         ax = self.figure.add_subplot(111)
         ax.hist(ratios, bins=50, color='blue', alpha=0.7)
@@ -105,10 +94,9 @@ class HistogramView(QMainWindow):
         ax.set_title("Histogram of Ratio")
         ax.set_yscale('log', base=10)
         self.canvas.draw()
-
+    
     def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
-        """Extract the threshold values from the input fields. If invalid, reset to default. It will also enforce that lower is less than upper."""
-        
+        """Extract and validate threshold values from the input fields."""
         try:
             lower_val = float(self.lower_edit.text())
         except ValueError:
@@ -118,13 +106,9 @@ class HistogramView(QMainWindow):
             upper_val = float(self.upper_edit.text())
         except ValueError:
             upper_val = round(default_upper, 2)
-            self.upper_edit.setText(str(upper_val))  # Update text to default
+            self.upper_edit.setText(str(upper_val))
         
-        # Enforce that lower is less than upper
         if lower_val >= upper_val:
-            # Adjust upper value to be slightly greater than lower value
             upper_val = lower_val + 0.01
             self.upper_edit.setText(str(round(upper_val, 2)))
-        
         return lower_val, upper_val
-
