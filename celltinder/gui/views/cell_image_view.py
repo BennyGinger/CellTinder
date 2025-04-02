@@ -1,67 +1,106 @@
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QSlider, QCheckBox, QPushButton
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (QLabel, QSlider, QCheckBox, QPushButton, QWidget,
+                             QVBoxLayout, QHBoxLayout)
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
 from gui.views.base_view import BaseView
 
 
 class CellImageView(BaseView):
-    """View class for the cell image GUI."""
-    
-    def __init__(self, n_frames: int, cell_number: int, total_cells: int, cell_ratio, parent=None):
-        super().__init__("Cell Image Viewer")
+    # Define signals to communicate user actions.
+    backClicked = pyqtSignal()
+    previousCellClicked = pyqtSignal()
+    skipCellClicked = pyqtSignal()
+    keepCellClicked = pyqtSignal()
+    processCellsClicked = pyqtSignal()
+    frameChanged = pyqtSignal(int)
+    overlayToggled = pyqtSignal(bool)
+
+    def __init__(self, n_frames: int) -> None:
+        super().__init__("Cell Image View")
         self.n_frames = n_frames
-        self.cell_number = cell_number
-        self.total_cells = total_cells
-        self.cell_ratio = cell_ratio
-        self.current_frame = 1
-        
-        # Create a top bar with a Back button and frame title
-        self.back_button = QPushButton("Back to histo gui")
-        self.frame_title = QLabel(f"Frame {self.current_frame}")
-        self.frame_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.create_top_bar(left_widget=self.back_button, center_widget=self.frame_title)
-        
-        # Create the main content area with left panel, center image area, and right panel
-        content_layout = QHBoxLayout()
-        
-        # Left panel: cell info and ratio
-        left_panel = QVBoxLayout()
-        self.cell_info_label = QLabel(f"Cell {self.cell_number} / {self.total_cells}")
-        self.ratio_label = QLabel(f"Ratio: {self.cell_ratio}")
-        left_panel.addWidget(self.cell_info_label)
-        left_panel.addWidget(self.ratio_label)
-        left_panel.addStretch()
-        content_layout.addLayout(left_panel)
-        
-        # Center panel: image display and frame slider
-        center_panel = QVBoxLayout()
+
+        # --- Top Bar: Back button ---
+        self.back_btn = QPushButton("Back to histo gui")
+        self.back_btn.clicked.connect(self.backClicked.emit)
+        self.create_top_bar(left_widget=self.back_btn)
+
+        # --- Central Area: Left, Center, Right Layouts ---
+        self.content_layout = QHBoxLayout()
+
+        # Left side: Display cell information.
+        # Initialize with default placeholder values.
+        self.info_widget = QWidget()
+        self.info_layout = QVBoxLayout(self.info_widget)
+        self.cell_info_label = QLabel("Cell ?/?")
+        self.cell_ratio_label = QLabel("Ratio: ?")
+        self.info_layout.addWidget(self.cell_info_label)
+        self.info_layout.addWidget(self.cell_ratio_label)
+        self.info_layout.addStretch()
+        self.content_layout.addWidget(self.info_widget)
+
+        # Center: Image display, frame title and slider.
+        self.image_widget = QWidget()
+        self.image_layout = QVBoxLayout(self.image_widget)
+        self.frame_title_label = QLabel("Frame 1")
+        self.frame_title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_layout.addWidget(self.frame_title_label)
+
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        center_panel.addWidget(self.image_label)
-        
-        self.frame_slider = QSlider(Qt.Orientation.Horizontal)
-        self.frame_slider.setMinimum(1)
-        self.frame_slider.setMaximum(self.n_frames)
-        self.frame_slider.setValue(self.current_frame)
-        center_panel.addWidget(self.frame_slider)
-        content_layout.addLayout(center_panel)
-        
-        # Right panel: overlay checkbox
-        right_panel = QVBoxLayout()
-        self.overlay_checkbox = QCheckBox("Overlay Mask")
-        right_panel.addWidget(self.overlay_checkbox)
-        right_panel.addStretch()
-        content_layout.addLayout(right_panel)
-        
-        self.main_layout.addLayout(content_layout)
-        
-        # Create bottom bar with navigation buttons
-        self.prev_button = QPushButton("Previous cell")
-        self.skip_button = QPushButton("Skip cell")
-        self.keep_button = QPushButton("Keep cell")
-        self.process_button = QPushButton("Process cells")
-        self.create_bottom_bar([self.prev_button, self.skip_button, self.keep_button, self.process_button])
-    
-    def setImage(self, pixmap: QPixmap):
+        self.image_layout.addWidget(self.image_label)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setMinimum(1)
+        self.slider.setMaximum(self.n_frames)
+        self.slider.setValue(1)
+        self.slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.slider.valueChanged.connect(self.on_slider_value_changed)
+        self.image_layout.addWidget(self.slider)
+
+        self.content_layout.addWidget(self.image_widget, stretch=1)
+
+        # Right side: Overlay checkbox.
+        self.overlay_checkbox = QCheckBox("Overlay mask")
+        self.overlay_checkbox.setChecked(False)
+        self.overlay_checkbox.toggled.connect(self.overlayToggled.emit)
+        self.overlay_widget = QWidget()
+        self.overlay_layout = QVBoxLayout(self.overlay_widget)
+        self.overlay_layout.addStretch()
+        self.overlay_layout.addWidget(self.overlay_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.overlay_layout.addStretch()
+        self.content_layout.addWidget(self.overlay_widget)
+
+        # Add the central content layout.
+        self.main_layout.addLayout(self.content_layout)
+
+        # --- Bottom Bar: Navigation Buttons ---
+        self.prev_cell_btn = QPushButton("Previous cell")
+        self.prev_cell_btn.clicked.connect(self.previousCellClicked.emit)
+        self.skip_cell_btn = QPushButton("Skip cell")
+        self.skip_cell_btn.clicked.connect(self.skipCellClicked.emit)
+        self.keep_cell_btn = QPushButton("Keep cell")
+        self.keep_cell_btn.clicked.connect(self.keepCellClicked.emit)
+        self.process_cells_btn = QPushButton("Process cells")
+        self.process_cells_btn.clicked.connect(self.processCellsClicked.emit)
+        buttons = [self.prev_cell_btn, self.skip_cell_btn, self.keep_cell_btn, self.process_cells_btn]
+        self.create_bottom_bar(buttons, alignment=Qt.AlignmentFlag.AlignLeft)
+
+    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float) -> None:
+        """Update the cell info labels."""
+        self.cell_info_label.setText(f"Cell {cell_number + 1}/{total_cells}")
+        self.cell_ratio_label.setText(f"Ratio: {cell_ratio}")
+
+    def on_slider_value_changed(self, value: int) -> None:
+        # Update the frame title (displaying one-indexed frame number).
+        self.frame_title_label.setText(f"Frame {value}")
+        # Emit the frameChanged signal (subtract one if using zero-indexing in controller).
+        self.frameChanged.emit(value - 1)
+
+    def setImage(self, pixmap: QPixmap) -> None:
+        """Update the central image display."""
         self.image_label.setPixmap(pixmap)
+
+    def setTitle(self, title: str) -> None:
+        """Update the frame title label."""
+        self.frame_title_label.setText(title)

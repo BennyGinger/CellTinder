@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pandas as pd
 import tifffile as tiff
 import numpy as np
 
@@ -101,4 +102,4 @@ class CellImageSet:
                         mode='constant', 
                         constant_values=0)                   
         return cropped
-    
+
