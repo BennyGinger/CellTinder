@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QLabel, QSlider, QCheckBox, QPushButton, QWidget,
-                             QVBoxLayout, QHBoxLayout)
+                             QVBoxLayout, QHBoxLayout, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
@@ -48,6 +48,8 @@ class CellImageView(BaseView):
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.image_label.setScaledContents(True)
         self.image_layout.addWidget(self.image_label)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)

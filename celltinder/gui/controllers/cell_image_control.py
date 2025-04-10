@@ -1,5 +1,8 @@
-from PIL import Image, ImageQt
-from PyQt6.QtGui import QPixmap
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.colors import LinearSegmentedColormap
+from PyQt6.QtGui import QPixmap, QImage
+import numpy as np
 
 from backend.data_loader import DataLoader
 from gui.views.cell_image_view import CellImageView
@@ -46,26 +49,51 @@ class CellImageController:
         self._update_image()
 
     def _update_image(self) -> None:
-        """Update the image displayed in the view. If overlay is enabled, then overlay the mask array on top of the image."""
+        """Update the image displayed in the view using matplotlib.
         
-        img_array = self.current_cell.imgs[self.current_frame]
-        base_pil = Image.fromarray(img_array)
-        
-        # Check if the overlay is enabled
+        The 16-bit image is displayed with a custom green colormap, and, if enabled,
+        a gray overlay is applied from the mask.
+        """
+        # Get the 16-bit image from the current cell.
+        img16 = self.current_cell.imgs[self.current_frame]
+        # Optionally, get the mask (without conversion) for overlay.
         if getattr(self, "overlay_enabled", False):
-            # Retrieve the corresponding mask array
-            mask_array = self.current_cell.masks[self.current_frame]
-            mask_pil = Image.fromarray(mask_array).convert("L")
-            # Convert image to RGBA for blending
-            base_rgba = base_pil.convert("RGBA")
-            overlay = Image.new("RGBA", base_rgba.size, (255, 0, 0, 100))
-            # Composite the overlay using the mask as the transparency map.
-            blended = Image.composite(overlay, base_rgba, mask_pil)
-            final_img = Image.alpha_composite(base_rgba, blended)
-        else:
-            final_img = base_pil
+            mask = self.current_cell.masks[self.current_frame]
         
-        qimage = ImageQt.ImageQt(final_img)
+        # Create a matplotlib figure.
+        # Adjust figsize/dpi as needed to get the appropriate resolution.
+        fig = Figure(figsize=(8, 8), dpi=150)
+        ax = fig.add_subplot(111)
+        ax.axis('off')  # Hide axes
+        
+        # Create a custom green colormap.
+        # This maps the lowest intensity to black and the highest to green.
+        cmap_dict = {
+            'red':   [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
+            'blue':  [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]}
+        green_cmap = LinearSegmentedColormap('GreenScale', segmentdata=cmap_dict, N=256)
+        
+        # Display the 16-bit cell image using the custom green colormap.
+        # vmin and vmax will map the full 16-bit dynamic range.
+        ax.imshow(img16, cmap=green_cmap, interpolation='bicubic',
+                  vmin=np.min(img16), vmax=np.max(img16))
+        
+        # If overlay is enabled, display the mask on top using a gray colormap.
+        if getattr(self, "overlay_enabled", False):
+            # draw the contours of the mask on top of the image. Mask should be binary, so threshold should be higher than 0.
+            ax.contour(mask, levels=[1], colors='gray', linewidths=2)
+        
+        # Render the figure to a canvas.
+        canvas = FigureCanvas(fig)
+        canvas.draw()
+        width, height = canvas.get_width_height()
+        # Retrieve the RGBA buffer from the canvas.
+        img_buffer = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8).reshape(height, width, 4)
+        
+        # Create a QImage from the RGBA buffer.
+        qimage = QImage(img_buffer.data, width, height, QImage.Format.Format_RGBA8888)
+        # Convert QImage to QPixmap
         pixmap = QPixmap.fromImage(qimage)
         self.view.setImage(pixmap)
     

@@ -16,6 +16,8 @@ class BaseView(QMainWindow):
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
+        # Set an initial window size, e.g. 1200x800 pixels
+        self.resize(1200, 800)
     
     def create_top_bar(self, left_widget: QWidget = None, center_widget: QWidget = None) -> None:
         """
