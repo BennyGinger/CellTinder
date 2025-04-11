@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 import tifffile
 from pathlib import Path
+
 from celltinder.backend.cell_image_set import CellImageSet
 
 # --- Fixtures and Helpers ---
@@ -44,8 +45,9 @@ def test_cellimageset_loading(dummy_images):
     # Use a cell centroid that is centrally located so that no padding is required.
     cell_centroid = (50, 50)
     box_size = 50  # crop to a 50x50 image
+    cell_value = 1  # Dummy value for the cell mask
     
-    cell_set = CellImageSet(cell_centroid, pre_img_path, pre_mask_path, n_frames, box_size)
+    cell_set = CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_value, n_frames, box_size)
     # Verify that for each frame the cropped images and masks have the correct dimensions.
     for frame in range(1, n_frames + 1):
         assert cell_set.imgs[frame].shape == (box_size, box_size)
@@ -73,8 +75,9 @@ def test_cropping_with_padding(tmp_path: Path):
     # Set a cell centroid near the top-left corner. With a box_size of 8, the crop will require padding.
     cell_centroid = (2, 2)
     box_size = 8
+    cell_value = 1  # Dummy value for the cell mask
     
-    cell_set = CellImageSet(cell_centroid, pre_img_path, pre_mask_path, n_frames, box_size)
+    cell_set = CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_value, n_frames, box_size)
     
     cropped_img = cell_set.imgs[1]
     cropped_mask = cell_set.masks[1]

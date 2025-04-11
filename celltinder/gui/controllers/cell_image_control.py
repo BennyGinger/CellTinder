@@ -1,3 +1,4 @@
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.colors import LinearSegmentedColormap
@@ -7,6 +8,22 @@ import numpy as np
 from backend.data_loader import DataLoader
 from gui.views.cell_image_view import CellImageView
 
+# Constants for figure size and DPI
+FIG_SIZE = (8, 8)  # inches
+DPI = 150  # dots per inch
+
+# Define the custom colormap: 
+CURRENT_COLOR = 'green'
+# maps low intensities to black and high to current color.
+CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+                         'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
+                         'blue': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]},
+               'red': {'red': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
+                       'green': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+                       'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]},
+               'blue': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+                        'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
+                        'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
 class CellImageController:
     def __init__(self, data_loader: DataLoader, view: CellImageView) -> None:
@@ -54,35 +71,19 @@ class CellImageController:
         The 16-bit image is displayed with a custom green colormap, and, if enabled,
         a gray overlay is applied from the mask.
         """
-        # Get the 16-bit image from the current cell.
-        img16 = self.current_cell.imgs[self.current_frame]
-        # Optionally, get the mask (without conversion) for overlay.
-        if getattr(self, "overlay_enabled", False):
-            mask = self.current_cell.masks[self.current_frame]
+        # Get the 16-bit image and mask (if necessary) from the current cell.
+        img16, mask = self._get_image_and_mask()
         
         # Create a matplotlib figure.
         # Adjust figsize/dpi as needed to get the appropriate resolution.
-        fig = Figure(figsize=(8, 8), dpi=150)
-        ax = fig.add_subplot(111)
-        ax.axis('off')  # Hide axes
-        
-        # Create a custom green colormap.
-        # This maps the lowest intensity to black and the highest to green.
-        cmap_dict = {
-            'red':   [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
-            'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
-            'blue':  [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]}
-        green_cmap = LinearSegmentedColormap('GreenScale', segmentdata=cmap_dict, N=256)
+        fig, ax = self._create_figure(fig_size=FIG_SIZE, dpi=DPI)
         
         # Display the 16-bit cell image using the custom green colormap.
-        # vmin and vmax will map the full 16-bit dynamic range.
-        ax.imshow(img16, cmap=green_cmap, interpolation='bicubic',
-                  vmin=np.min(img16), vmax=np.max(img16))
+        self._display_image(ax, img16)
         
-        # If overlay is enabled, display the mask on top using a gray colormap.
-        if getattr(self, "overlay_enabled", False):
-            # draw the contours of the mask on top of the image. Mask should be binary, so threshold should be higher than 0.
-            ax.contour(mask, levels=[1], colors='gray', linewidths=2)
+        # If overlay is enabled, add the mask as a contour.
+        if mask is not None:
+            self._overlay_mask(ax, mask)
         
         # Render the figure to a canvas.
         canvas = FigureCanvas(fig)
@@ -95,6 +96,69 @@ class CellImageController:
         qimage = QImage(img_buffer.data, width, height, QImage.Format.Format_RGBA8888)
         # Convert QImage to QPixmap
         pixmap = QPixmap.fromImage(qimage)
+        self.view.setImage(pixmap)
+    
+    def _get_image_and_mask(self) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Retrieves the 16-bit image and, if enabled, the mask from the current cell.
+        Returns:
+            img16 (np.ndarray): The 16-bit image.
+            mask (np.ndarray or None): The mask if overlay is enabled, otherwise None.
+        """
+        img16 = self.current_cell.imgs[self.current_frame]
+        mask = None
+        if getattr(self, "overlay_enabled", False):
+            mask = self.current_cell.masks[self.current_frame]
+        return img16, mask
+    
+    def _create_figure(self, fig_size: tuple[int, int], dpi: int) -> tuple[Figure, Axes]:
+        """
+        Creates and returns a matplotlib figure and axis.
+        
+        Args:
+            fig_size (tuple[int, int]): The size of the figure in inches.
+            dpi (int): The resolution of the figure in dots per inch.
+    
+        Returns:
+            A tuple containing the fig (Figure) and the ax (Axes) for the display.
+        """
+        fig = Figure(figsize=fig_size, dpi=dpi)
+        ax = fig.add_subplot(111)
+        # Hide axes
+        ax.axis('off')
+        return fig, ax
+    
+    def _display_image(self, ax: Axes, img16: np.ndarray) -> None:
+        """
+        Displays the 16-bit image on the provided axis using a custom colormap.
+        """
+        # Create a custom colormap.
+        cmap = LinearSegmentedColormap('GreenScale', segmentdata=CUSTOM_CMAP[CURRENT_COLOR], N=256)
+        
+        # Display the image
+        ax.imshow(img16, cmap=cmap, interpolation='bicubic',
+                  vmin=np.min(img16), vmax=np.max(img16))
+    
+    def _overlay_mask(self, ax, mask) -> None:
+        """
+        Overlays the mask on the image by drawing a contour outlining the mask. Assumes that the mask is binary (background=0, foreground>=1).
+        """
+        # For a binary mask, a threshold of 1 is appropriate to delineate edges.
+        ax.contour(mask, levels=[1], colors='gray', linewidths=2)
+    
+    def _draw_canvas_and_set_image(self, fig: Figure) -> None:
+        """
+        Renders the given figure to a FigureCanvas, converts the result to a QPixmap, and updates the view's image.
+        """
+        canvas = FigureCanvas(fig)
+        canvas.draw()
+        width, height = canvas.get_width_height()
+        # Convert the canvas buffer to a numpy array in a 8-bit format.
+        img_buffer = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8).reshape(height, width, 4)
+        # Create a QImage from the RGBA buffer.
+        qimage = QImage(img_buffer.data, width, height, QImage.Format.Format_RGBA8888)
+        pixmap = QPixmap.fromImage(qimage)
+        # Set the image in the view.
         self.view.setImage(pixmap)
     
     def on_frame_changed(self, frame: int) -> None:

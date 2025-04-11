@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backend.cell_image_set import CellImageSet
+from celltinder.backend.cell_image_set import CellImageSet
 
    
 class DataLoader:
@@ -20,29 +20,46 @@ class DataLoader:
         self.column_thresholds = 'ratio'
 
     def filter_data(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
-        """Filter the data based on the lower and upper thresholds."""
-        
+        """
+        Filter the data based on the lower and upper thresholds.
+        Args:
+            lower: Lower threshold
+            upper: Upper threshold
+            col_name: Column name to filter on
+        Returns:
+            pd.DataFrame: Filtered DataFrame
+        """
         return self.df[(self.df[col_name] >= lower) & (self.df[col_name] <= upper)]
 
     def get_cell_count(self, lower: float, upper: float) -> int:
-        """Get the cell count based on the lower and upper thresholds."""
-        
+        """
+        Get the cell count based on the lower and upper thresholds.
+        Args:
+            lower: Lower threshold
+            upper: Upper threshold
+        Returns:
+            int: Number of cells within the thresholds
+        """
         filtered = self.filter_data(lower, upper)
         return len(filtered)
     
     def update_thresholds(self, lower: float, upper: float, new_column: str) -> None:
-        """Update the thresholds and add a new column to the DataFrame."""
-        
+        """
+        Update the thresholds and add a new column to the DataFrame.
+        """
         self.lower = lower
         self.upper = upper
         self.column_thresholds = new_column
     
     def save_csv(self) -> None:
-        """Save the data to a new CSV file."""
+        """
+        Save the data to a new CSV file.
+        """
         self.df.to_csv(self.csv_path, index=False)
 
-    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, box_size: int = 150) -> CellImageSet:
-        """Load and crop all images or masks for a specific cell.
+    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, crop_size: int = 151) -> CellImageSet:
+        """
+        Load and crop all images or masks for a specific cell.
         
         Args:
             cell_idx: Index of the cell to load from the dataframe
@@ -54,31 +71,36 @@ class DataLoader:
         Returns:
             CellArrays: A CellArrays object containing the loaded and cropped images and masks
         """
-        
-        # Check that threshold have been set
-        if not hasattr(self, 'lower') or not hasattr(self, 'upper'):
-            raise ValueError("Thresholds must be set before loading arrays.")
-        
         # Get the positive cells
         pos_df = self.pos_df
         
         # Extract cell specific parameters
         cell_centroid: tuple[float, float] = tuple(pos_df[['centroid_y', 'centroid_x']].iloc[cell_idx].values)
         fov_ID = pos_df['fov_ID'].iloc[cell_idx]
+        cell_mask_value = pos_df['cell_numb'].iloc[cell_idx]
         
-        # Build folders
+        # Build img and mask directories
+        img_dir, mask_dir = self._build_image_mask_dirs(fov_ID)
+        
+        # Build arrays file pre-paths (missing the frame number)
+        pre_img_path = img_dir.joinpath(f"{fov_ID}_{img_label}.tif")
+        pre_mask_path = mask_dir.joinpath(f"{fov_ID}_{mask_label}.tif")
+        
+        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, n_frames, crop_size)
+
+    def _build_image_mask_dirs(self, fov_ID: str) -> tuple[Path, Path]:
+        """
+        Build the image and mask directories based on the fov_ID.
+        """
+        # Build the folder names
         well_ID = fov_ID.split('_')[0]
         img_folder_name = f"{well_ID}_images"
         mask_folder_name = f"{well_ID}_masks"
+        # Build the folder paths
         project_path = self.csv_path.parent
         img_path = project_path.joinpath(img_folder_name)
         mask_path = project_path.joinpath(mask_folder_name)
-        
-        # Build arrays file paths
-        pre_img_path = img_path.joinpath(f"{fov_ID}_{img_label}.tif")
-        pre_mask_path = mask_path.joinpath(f"{fov_ID}_{mask_label}.tif")
-        
-        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, n_frames, box_size)
+        return img_path, mask_path
     
     def add_process_col(self) -> None:
         """Add a 'process' column to the DataFrame."""

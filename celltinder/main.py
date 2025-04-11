@@ -25,7 +25,6 @@ def main2(csv_path: Path, n_frames: int = 2, box_size: int = 150) -> None:
     
     app = QApplication(sys.argv)
     data = DataLoader(csv_path)
-    pos_df = data.pos_df
     
     view = CellImageView(n_frames)
     

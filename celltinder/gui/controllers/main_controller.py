@@ -36,7 +36,7 @@ class MainController:
         if cell_data is None:
             # In case no cell is returned, create a dummy cell data for demonstration.
             cell_data = pd.Series({'centroid_y': 100, 'centroid_x': 100, 'fov_ID': 'dummy_fov', 'ratio': 0.75})
-        self.cell_image_set = self.model.loads_arrays(csv_path, cell_data, n_frames=2, box_size=150)
+        self.cell_image_set = self.model.loads_arrays(csv_path, cell_data, n_frames=2, crop_size=150)
         self.cell_ratio = cell_data.get('ratio', 0.75)
         total_cells = self.model.total_filtered() if self.model.total_filtered() > 0 else 1
         self.cell_image_view = CellImageView(n_frames=2, cell_number=self.current_cell_index+1,

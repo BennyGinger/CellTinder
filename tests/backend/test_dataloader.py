@@ -17,23 +17,20 @@ def sample_csv(tmp_path: Path) -> Path:
         'ratio': [0.1, 0.5, 0.8],
         'centroid_y': [50, 60, 55],
         'centroid_x': [100, 110, 105],
-        'fov_ID': ['A1', 'A2', 'A3']
+        'fov_ID': ['A1', 'A2', 'A3'],
+        'cell_numb': [1, 2, 3],
     }
     df = pd.DataFrame(data)
     csv_file = tmp_path / "test.csv"
     df.to_csv(csv_file, index=False)
     return csv_file
 
-def create_dummy_tiff(file_path: Path, shape=(200, 200), value=1):
-    """Helper function to create a dummy TIFF file."""
-    arr = np.full(shape, value, dtype=np.uint8)
-    tifffile.imwrite(file_path, arr)
-
 class DummyCellImageSet:
-    def __init__(self, cell_centroid, pre_img_path, pre_mask_path, n_frames, box_size):
+    def __init__(self, cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, n_frames, box_size):
         self.cell_centroid = cell_centroid
         self.pre_img_path = pre_img_path
         self.pre_mask_path = pre_mask_path
+        self.cell_mask_value = cell_mask_value
         self.n_frames = n_frames
         self.box_size = box_size
 
@@ -97,9 +94,12 @@ def test_loads_arrays_pre_file_path(sample_csv: Path, monkeypatch):
     expected_fov_ID = 'A3'
     expected_centroid = (55, 105)  # (centroid_y, centroid_x)
 
-    # Create temporary directories for images and masks.
-    img_folder = Path("dummy/images")
-    mask_folder = Path("dummy/masks")
+    # Compute expected directories based on the CSV parent directory
+    project_path = sample_csv.parent
+    # Since fov_ID is "A3", well_ID is "A3"
+    expected_img_dir = project_path.joinpath("A3_images")
+    expected_mask_dir = project_path.joinpath("A3_masks")
+
 
     n_frames = 3
     box_size = 150
@@ -107,20 +107,18 @@ def test_loads_arrays_pre_file_path(sample_csv: Path, monkeypatch):
     # Call loads_arrays. This should internally build the pre_file_path using the fov_ID and label.
     dummy_set = loader.loads_arrays(
         cell_idx=cell_idx,
-        img_folder=img_folder,
-        mask_folder=mask_folder,
         img_label='measure',
         mask_label='mask',
         n_frames=n_frames,
-        box_size=box_size
+        crop_size=box_size
     )
 
     # Verify that the extracted centroid matches the expected value.
     assert dummy_set.cell_centroid == expected_centroid
 
     # Verify that the pre_img_path and pre_mask_path are built correctly.
-    expected_img_path = img_folder / f"{expected_fov_ID}_measure.tif"
-    expected_mask_path = mask_folder / f"{expected_fov_ID}_mask.tif"
+    expected_img_path = expected_img_dir.joinpath(f"{expected_fov_ID}_measure.tif")
+    expected_mask_path = expected_mask_dir.joinpath(f"{expected_fov_ID}_mask.tif")
     assert dummy_set.pre_img_path == expected_img_path
     assert dummy_set.pre_mask_path == expected_mask_path
 
@@ -128,8 +126,3 @@ def test_loads_arrays_pre_file_path(sample_csv: Path, monkeypatch):
     assert dummy_set.n_frames == n_frames
     assert dummy_set.box_size == box_size
 
-def test_loads_arrays_without_thresholds(sample_csv: Path, tmp_path: Path):
-    loader = DataLoader(sample_csv)
-    # Without calling update_thresholds, accessing loads_arrays should raise a ValueError
-    with pytest.raises(ValueError):
-        loader.loads_arrays(cell_idx=0, img_folder=tmp_path, mask_folder=tmp_path)
