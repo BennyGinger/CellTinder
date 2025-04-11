@@ -4,13 +4,14 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.colors import LinearSegmentedColormap
 from PyQt6.QtGui import QPixmap, QImage
 import numpy as np
+from scipy.ndimage import binary_dilation
 
 from backend.data_loader import DataLoader
 from gui.views.cell_image_view import CellImageView
 
 # Constants for figure size and DPI
-FIG_SIZE = (8, 8)  # inches
-DPI = 150  # dots per inch
+FIG_SIZE = (5, 5)  # inches
+DPI = 100  # dots per inch
 
 # Define the custom colormap: 
 CURRENT_COLOR = 'green'
@@ -139,12 +140,17 @@ class CellImageController:
         ax.imshow(img16, cmap=cmap, interpolation='bicubic',
                   vmin=np.min(img16), vmax=np.max(img16))
     
-    def _overlay_mask(self, ax, mask) -> None:
+    def _overlay_mask(self, ax: Axes, mask: np.ndarray) -> None:
         """
         Overlays the mask on the image by drawing a contour outlining the mask. Assumes that the mask is binary (background=0, foreground>=1).
         """
+        # Dilate the mask to make the edges more visible. Need to reconvert it to uint8 for contouring.
+        # the new mask value is set to 50 to allow contour() to have a better dynamic range.
+        dilated_mask_bool = binary_dilation(mask, iterations=5)
+        dilated_mask = np.where(dilated_mask_bool, 50, 0).astype(np.uint8)
+        
         # For a binary mask, a threshold of 1 is appropriate to delineate edges.
-        ax.contour(mask, levels=[1], colors='gray', linewidths=2)
+        ax.contour(dilated_mask, levels=[1], colors='gray', linewidths=2)
     
     def _draw_canvas_and_set_image(self, fig: Figure) -> None:
         """
