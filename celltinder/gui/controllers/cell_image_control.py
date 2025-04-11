@@ -35,17 +35,18 @@ class CellImageController:
         self.df = self.data.pos_df
         # Starting index for the positive cells
         self.current_idx = 0
-        self.current_frame = 1            
+        self.current_frame = 1          
 
         # Setup view and connect signals...
         self.view = view
+        self.view.total_cells = len(self.df)
         self.view.previousCellClicked.connect(self.on_previous_cell)
         self.view.skipCellClicked.connect(self.on_skip_cell)
         self.view.keepCellClicked.connect(self.on_keep_cell)
         self.view.processCellsClicked.connect(self.on_process_cells)
         self.view.frameChanged.connect(self.on_frame_changed)
         self.view.overlayToggled.connect(self.on_overlay_toggled)
-
+        self.view.cellSliderChanged.connect(self.on_cell_slider_changed)
 
         # Load the first cell using its index from the df.
         self._load_cell()
@@ -198,6 +199,13 @@ class CellImageController:
         self.df.iloc[self.current_idx, self.df.columns.get_loc('process')] = True
         self._move_to_next_cell()
 
+    def on_cell_slider_changed(self, cell_number: int) -> None:
+        """
+        Called when the user releases the cell slider. Update the current index and load that cell.
+        """
+        self.current_idx = cell_number - 1
+        self._load_cell()
+    
     def _move_to_next_cell(self) -> None:
         """Move to the next cell in the DataFrame. If at the end, loop back to the start."""
         
