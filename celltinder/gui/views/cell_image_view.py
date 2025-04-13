@@ -18,7 +18,6 @@ class CellImageView(BaseView):
     processCellsClicked = pyqtSignal()
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
-    # New signal: Emitted when cell selection is finalized (slider released)
     cellSliderChanged = pyqtSignal(int)
 
     def __init__(self, n_frames: int) -> None:
@@ -268,7 +267,6 @@ class CellImageView(BaseView):
             self.state_indicator_label.setText("✗")
             self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
 
-
     def _on_cell_slider_value_changed(self, value: int) -> None:
         self.cell_info_label.setText(f"Cell {value}/{self.total_cells}")
 
@@ -277,6 +275,23 @@ class CellImageView(BaseView):
 
     def on_frame_slider_value_changed(self, value: int) -> None:
         self.frameChanged.emit(value)
+
+    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
+        """
+        Update preview info as the slider moves.
+        Only update text fields and icon, not the full image.
+        """
+        self.cell_info_label.setText(f"Cell {cell_number + 1}/{total_cells}")
+        self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
+        self.selected_cells_value_label.setText(str(selected_count))
+        
+        # Update the overlay indicator:
+        if processed:
+            self.state_indicator_label.setText("✓")
+            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: green;")
+        else:
+            self.state_indicator_label.setText("✗")
+            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
 
     def setImage(self, pixmap: QPixmap) -> None:
         self.image_label.setPixmap(pixmap)

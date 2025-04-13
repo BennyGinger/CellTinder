@@ -46,6 +46,8 @@ class CellImageController:
         self.view.frameChanged.connect(self.on_frame_changed)
         self.view.overlayToggled.connect(self.on_overlay_toggled)
         self.view.cellSliderChanged.connect(self.on_cell_slider_changed)
+        self.view.cell_slider.valueChanged.connect(self.on_cell_slider_value_preview)
+
         # Set the initial size of the view.
         self.view.adjustSize()
 
@@ -219,6 +221,19 @@ class CellImageController:
         self.current_idx = cell_number - 1
         self._load_cell()
     
+    def on_cell_slider_value_preview(self, value: int) -> None:
+        """
+        Update the info panel and icon based on slider movement.
+        (This is a preview update and should not trigger a full image reload.)
+        """
+        index = value - 1  # Convert the slider value to 0-indexed.
+        # Retrieve the preview data from your DataFrame.
+        ratio = self.df['ratio'].iloc[index]
+        processed = self.df['process'].iloc[index]
+        selected_count = int(self.df['process'].sum())
+        # Update the info panel (and overlay indicator) without loading a new image.
+        self.view.update_info_preview(index, self.total_cells, ratio, processed, selected_count)
+
     def _move_to_next_cell(self) -> None:
         """
         Move to the next cell in the DataFrame. If at the end, loop back to the start.
