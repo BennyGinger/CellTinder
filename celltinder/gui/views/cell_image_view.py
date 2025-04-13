@@ -81,45 +81,52 @@ class CellImageView(BaseView):
 
         self.image_layout.addWidget(self.info_widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
-    def _init_cell_slider(self) -> None:
+    def _init_cell_slider(self, with_title: bool = True) -> None:
         """
-        Initialize a new slider for cell selection.
-        This slider is placed right below the info panel.
-        Its valueChanged signal updates the cell info immediately,
-        while the sliderReleased signal signals that the user has finalized the cell selection.
+        Initialize a new slider for cell selection. If with_title is True, a label "Select Cell" is added. Otherwise, only the slider is added.
         """
         self.cell_slider_area = QVBoxLayout()
-        self.cell_slider_title = QLabel("Select Cell")
-        self.cell_slider_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cell_slider_area.addWidget(self.cell_slider_title)
-
+        
+        if with_title:
+            self.cell_slider_title = QLabel("Select Cell")
+            self.cell_slider_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.cell_slider_area.addWidget(self.cell_slider_title)
+        
         self.cell_slider = QSlider(Qt.Orientation.Horizontal)
         self.cell_slider.setMinimum(1)
-        # The maximum is the total number of cells; you may update this dynamically.
+        # The maximum is the total number of cells; update dynamically as needed.
         self.cell_slider.setMaximum(self.total_cells)
         self.cell_slider.setValue(1)
-
-        # Update info panel immediately as slider moves.
+        
+        # Connect signals.
         self.cell_slider.valueChanged.connect(self._on_cell_slider_value_changed)
-        # Emit signal when the user releases the slider.
         self.cell_slider.sliderReleased.connect(self._on_cell_slider_released)
         self.cell_slider_area.addWidget(self.cell_slider)
+        
         self.image_layout.addLayout(self.cell_slider_area)
 
     def _init_image_panel(self) -> None:
         """
         Initialize the central image display area.
-        Order (top to bottom): info panel (cell info and ratio), cell selection slider,
-        image display, then frame slider (for cell frames).
+        1. A new title ("Select Cell")
+        2. Info panel (cell info and ratio)
+        3. Cell selection slider (without a title)
+        4. Image display
+        5. Frame slider
         """
         self.image_widget = QWidget()
         self.image_layout = QVBoxLayout(self.image_widget)
-
+        
+        # New: Add the "Select Cell" title at the top.
+        self.title_label = QLabel("Select Cell")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_layout.addWidget(self.title_label)
+        
         # Info panel row.
         self._init_info_panel_in_image_area()
-
-        # NEW: Add cell selection slider below info panel.
-        self._init_cell_slider()
+        
+        # Cell slider: modified so it does not add its own title.
+        self._init_cell_slider(with_title=False)
 
         # Image display area.
         self.image_label = QLabel()
@@ -127,8 +134,8 @@ class CellImageView(BaseView):
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_label.setScaledContents(True)
         self.image_layout.addWidget(self.image_label)
-
-        # Frame slider area (already existing).
+        
+        # Frame slider area.
         self._init_frame_slider_area()
         self.image_layout.addLayout(self.slider_area_layout)
 
