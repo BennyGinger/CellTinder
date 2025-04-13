@@ -1,15 +1,9 @@
-from PyQt6.QtWidgets import (QLabel, QSlider, QCheckBox, QPushButton, QWidget,
-                             QVBoxLayout, QHBoxLayout, QSizePolicy, QGridLayout)
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSlider, QCheckBox, QSizePolicy, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-from gui.views.base_view import BaseView
 
-# TODO: Add the state of the current cell: Rejected or kept.
-# TODO: Move the "select cell" title above the cell info panel.
-# TODO: Merge the 2 GUI and connect the 'Back to histo gui' button and complete the logic of the "Process cells" button.
-
-class CellImageView(BaseView):
+class CellImageView(QMainWindow):
     # Define signals for user actions.
     backClicked = pyqtSignal()
     previousCellClicked = pyqtSignal()
@@ -21,12 +15,19 @@ class CellImageView(BaseView):
     cellSliderChanged = pyqtSignal(int)
 
     def __init__(self, n_frames: int) -> None:
-        super().__init__("Cell Image View")
-        self.n_frames = n_frames
+        super().__init__()
+        self.setWindowTitle("Cell Image View")
+        self.resize(1200, 800)
         
-        # Set a default value just for the initialization. This will be updated by the controller.
+        self.n_frames = n_frames
+        # Set a default value; will be updated by the controller.
         self.total_cells = 100
 
+        # Initialize the central widget and main layout (as done in BaseView).
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+        self.main_layout = QVBoxLayout(self.main_widget)
+        
         # Set up the top bar, content area, and bottom bar.
         self._init_top_bar()
         self._init_content_area()
@@ -34,41 +35,43 @@ class CellImageView(BaseView):
 
     def _init_top_bar(self) -> None:
         """
-        Create the top bar with the back button. Method is called from the BaseView constructor.
+        Create the top bar with the back button.
         """
+        top_layout = QHBoxLayout()
         self.back_btn = QPushButton("Back to histo gui")
         self.back_btn.clicked.connect(self.backClicked.emit)
-        self.create_top_bar(left_widget=self.back_btn)
+        top_layout.addWidget(self.back_btn)
+        top_layout.addStretch()
+        self.main_layout.addLayout(top_layout)
 
     def _init_content_area(self) -> None:
         """
-        Create the central area. The center contains the image panel (with info panel, cell slider, image display, overlay checkbox, and frame slider).
+        Create the central area.
+        The center contains the image panel (with info panel, cell slider, image display,
+        overlay checkbox, and frame slider).
         """
         self.content_layout = QHBoxLayout()
-
         # Center: Image display area.
         self._init_image_panel()
         self.content_layout.addWidget(self.image_widget, stretch=1)
-
         self.main_layout.addLayout(self.content_layout)
 
     def _init_info_panel_in_image_area(self) -> None:
         """
-        Initialize the info panel to be placed at the top of the image panel. This panel displays the cell number, the dynamic counter for selected cells, and the ratio.
+        Initialize the info panel at the top of the image panel.
+        Displays the cell number, the dynamic counter for selected cells, and the cell ratio.
         """
         self.info_widget = QWidget()
         info_layout = QHBoxLayout(self.info_widget)
         info_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Label for the cell info.
         self.cell_info_label = QLabel("Cell ?/?")
         self.cell_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Label for the cell ratio.
         self.cell_ratio_label = QLabel("Ratio: ?")
         self.cell_ratio_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Label for the selected cells counter.
+        # Selected cells counter (dynamic value on left, static title on right).
         self.selected_cells_value_label = QLabel("0")
         self.selected_cells_value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.selected_cells_title_label = QLabel(" cells selected")
@@ -77,7 +80,7 @@ class CellImageView(BaseView):
         selected_cells_layout.addWidget(self.selected_cells_value_label)
         selected_cells_layout.addWidget(self.selected_cells_title_label)
         
-        # Arrange labels with some spacing.
+        # Arrange labels with spacing.
         info_layout.addStretch()
         info_layout.addWidget(self.cell_info_label)
         info_layout.addSpacing(50)
@@ -90,7 +93,8 @@ class CellImageView(BaseView):
 
     def _init_cell_slider(self, with_title: bool = True) -> None:
         """
-        Initialize a new slider for cell selection. If with_title is True, a label "Select Cell" is added.
+        Initialize the slider for cell selection.
+        Optionally add a title ("Select Cell") above the slider.
         """
         self.cell_slider_area = QVBoxLayout()
         
@@ -101,11 +105,8 @@ class CellImageView(BaseView):
         
         self.cell_slider = QSlider(Qt.Orientation.Horizontal)
         self.cell_slider.setMinimum(1)
-        # The maximum is the total number of cells; update dynamically as needed.
         self.cell_slider.setMaximum(self.total_cells)
         self.cell_slider.setValue(1)
-        
-        # Connect signals.
         self.cell_slider.valueChanged.connect(self._on_cell_slider_value_changed)
         self.cell_slider.sliderReleased.connect(self._on_cell_slider_released)
         self.cell_slider_area.addWidget(self.cell_slider)
@@ -114,26 +115,27 @@ class CellImageView(BaseView):
 
     def _init_image_panel(self) -> None:
         """
-        Initialize the central image display area.
-        1. A new title ("Select Cell")
-        2. Info panel (cell info, selected count, and ratio)
-        3. Cell selection slider (without a title)
-        4. Image display with overlay indicator
-        5. Overlay checkbox (moved here above the frame slider)
-        6. Frame slider area
+        Initialize the image display area.
+        Includes:
+         1. A title ("Select Cell")
+         2. The info panel (cell info, selected count, ratio)
+         3. The cell slider (without extra title)
+         4. The image display with overlay indicator
+         5. The overlay checkbox (above the frame slider)
+         6. The frame slider area.
         """
         self.image_widget = QWidget()
         self.image_layout = QVBoxLayout(self.image_widget)
         
-        # Add the "Select Cell" title at the top.
+        # Title at the top.
         self.title_label = QLabel("Select Cell")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_layout.addWidget(self.title_label)
         
-        # Info panel row.
+        # Info panel.
         self._init_info_panel_in_image_area()
         
-        # Cell slider (without its own title).
+        # Cell slider (no extra title needed).
         self._init_cell_slider(with_title=False)
 
         # Image display area with overlay indicator.
@@ -143,14 +145,14 @@ class CellImageView(BaseView):
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setSpacing(0)
 
-        # Main image label.
+        # Main image.
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_label.setScaledContents(True)
         grid_layout.addWidget(self.image_label, 0, 0)
 
-        # State indicator label (overlay). Added to the same cell.
+        # Overlay indicator.
         self.state_indicator_label = QLabel()
         self.state_indicator_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
@@ -159,7 +161,7 @@ class CellImageView(BaseView):
 
         self.image_layout.addWidget(self.image_container)
 
-        # Add the overlay checkbox above the frame slider.
+        # Overlay checkbox above the frame slider.
         self.overlay_checkbox = QCheckBox("Overlay mask")
         self.overlay_checkbox.setChecked(False)
         self.overlay_checkbox.toggled.connect(self.overlayToggled.emit)
@@ -171,8 +173,7 @@ class CellImageView(BaseView):
 
     def _init_frame_slider_area(self) -> None:
         """
-        Create a vertical layout for the frame slider area.
-        (This slider is for selecting the frame within the current cell.)
+        Create a vertical layout for the frame slider area (for selecting the frame within the cell).
         """
         self.slider_area_layout = QVBoxLayout()
         self.slider_title = QLabel("Frames")
@@ -206,7 +207,6 @@ class CellImageView(BaseView):
         Create the bottom bar with navigation buttons.
         """
         bottom_layout = QHBoxLayout()
-        
         self.prev_cell_btn = QPushButton("Previous cell")
         self.prev_cell_btn.clicked.connect(self.previousCellClicked.emit)
         self.skip_cell_btn = QPushButton("Reject cell")
@@ -215,16 +215,13 @@ class CellImageView(BaseView):
         self.keep_cell_btn.clicked.connect(self.keepCellClicked.emit)
         self.process_cells_btn = QPushButton("Process cells")
         self.process_cells_btn.clicked.connect(self.processCellsClicked.emit)
-        
         buttons = [self.prev_cell_btn, self.skip_cell_btn, self.keep_cell_btn, self.process_cells_btn]
         for btn in buttons:
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        
         bottom_layout.addStretch()
         for btn in buttons:
             bottom_layout.addWidget(btn)
             bottom_layout.addStretch()
-        
         self.main_layout.addLayout(bottom_layout)
 
     def _on_cell_slider_value_changed(self, value: int) -> None:
@@ -236,14 +233,15 @@ class CellImageView(BaseView):
     def _on_frame_slider_value_changed(self, value: int) -> None:
         self.frameChanged.emit(value)
 
-    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
+    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float,
+                      processed: bool, selected_count: int) -> None:
         """
-        Update the info panel labels and state indicator.
+        Update info panel labels and overlay indicator.
         Args:
             cell_number: Zero-based index for the current cell.
             total_cells: Total number of cells.
-            cell_ratio: The cell's ratio to be displayed.
-            processed: True if the current cell is marked as kept, False otherwise.
+            cell_ratio: The cell's ratio.
+            processed: True if the cell is marked as kept.
             selected_count: The total number of kept cells.
         """
         self.total_cells = total_cells
@@ -253,10 +251,8 @@ class CellImageView(BaseView):
         self.cell_slider.setMaximum(total_cells)
         self.cell_slider.setValue(cell_number + 1)
         
-        # Update the selected cells counter.
         self.selected_cells_value_label.setText(str(selected_count))
         
-        # Update the overlay indicator.
         if processed:
             self.state_indicator_label.setText("✓")
             self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: green;")
@@ -264,22 +260,21 @@ class CellImageView(BaseView):
             self.state_indicator_label.setText("✗")
             self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
     
-    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
+    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float,
+                            processed: bool, selected_count: int) -> None:
         """
-        Update preview info as the slider moves.
-        Only update text fields and icon, not the full image.
+        Update the preview info as the slider moves (without reloading the full image).
         """
         self.cell_info_label.setText(f"Cell {cell_number + 1}/{total_cells}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
         self.selected_cells_value_label.setText(str(selected_count))
         
-        # Update the overlay indicator:
         if processed:
             self.state_indicator_label.setText("✓")
             self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: green;")
         else:
             self.state_indicator_label.setText("✗")
             self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
-
+    
     def setImage(self, pixmap: QPixmap) -> None:
         self.image_label.setPixmap(pixmap)
