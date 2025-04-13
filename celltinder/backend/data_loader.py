@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from celltinder.backend.cell_image_set import CellImageSet
+from backend.cell_image_set import CellImageSet
 
    
 class DataLoader:

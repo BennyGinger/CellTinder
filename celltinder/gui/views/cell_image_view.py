@@ -6,7 +6,6 @@ from PyQt6.QtGui import QPixmap
 from gui.views.base_view import BaseView
 
 # TODO: Add the state of the current cell: Rejected or kept.
-# TODO: Sort out the size of the window, it's not proportional to the image size.
 # TODO: Move the "select cell" title above the cell info panel.
 # TODO: Merge the 2 GUI and connect the 'Back to histo gui' button and complete the logic of the "Process cells" button.
 class CellImageView(BaseView):
@@ -217,7 +216,9 @@ class CellImageView(BaseView):
         self.cell_info_label.setText(f"Cell {cell_number + 1}/{total_cells}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
         
+        # Set the slider to the maximum number of cells and the current cell number.
         self.cell_slider.setMaximum(total_cells)
+        self.cell_slider.setValue(cell_number + 1)
 
     def _on_cell_slider_value_changed(self, value: int) -> None:
         """

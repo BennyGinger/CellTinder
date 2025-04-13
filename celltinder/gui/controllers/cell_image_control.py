@@ -47,6 +47,8 @@ class CellImageController:
         self.view.frameChanged.connect(self.on_frame_changed)
         self.view.overlayToggled.connect(self.on_overlay_toggled)
         self.view.cellSliderChanged.connect(self.on_cell_slider_changed)
+        # Set the initial size of the view.
+        self.view.adjustSize()
 
         # Load the first cell using its index from the df.
         self._load_cell()
