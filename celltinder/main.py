@@ -3,7 +3,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
 from backend.data_loader import DataLoader
-from gui.views.cell_image_view import CellImageView
+from gui.views.cell_view_manager import CellViewManager
 from gui.controllers.cell_image_control import CellImageController
 from gui.views.histo_view import HistogramView
 from gui.controllers.histo_control import HistogramController
@@ -26,7 +26,7 @@ def main2(csv_path: Path, n_frames: int = 2, box_size: int = 150) -> None:
     app = QApplication(sys.argv)
     data = DataLoader(csv_path)
     
-    view = CellImageView(n_frames)
+    view = CellViewManager(n_frames)
     
     controller = CellImageController(data, view)
     controller.view.show()

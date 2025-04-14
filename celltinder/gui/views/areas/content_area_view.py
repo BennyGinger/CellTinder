@@ -1,58 +1,12 @@
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QPushButton, QLabel, QSlider, QCheckBox, QSizePolicy
-)
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QSlider, QCheckBox, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-# ============================
-# Top Bar Widget
-# ============================
-class TopBarWidget(QWidget):
-    backClicked = pyqtSignal()
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QHBoxLayout(self)
-        self.back_btn = QPushButton("Back to histo gui")
-        layout.addWidget(self.back_btn)
-        layout.addStretch()
-        # Connect the button click to the signal.
-        self.back_btn.clicked.connect(self.backClicked.emit)
 
-
-# ============================
-# Bottom Bar Widget
-# ============================
-class BottomBarWidget(QWidget):
-    previousCellClicked = pyqtSignal()
-    skipCellClicked = pyqtSignal()
-    keepCellClicked = pyqtSignal()
-    processCellsClicked = pyqtSignal()
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        layout = QHBoxLayout(self)
-        self.prev_cell_btn = QPushButton("Previous cell")
-        self.skip_cell_btn = QPushButton("Reject cell")
-        self.keep_cell_btn = QPushButton("Keep cell")
-        self.process_cells_btn = QPushButton("Process cells")
-        for btn in [self.prev_cell_btn, self.skip_cell_btn, self.keep_cell_btn, self.process_cells_btn]:
-            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            layout.addWidget(btn)
-            layout.addStretch()
-        # Connect each button's click to the corresponding signal.
-        self.prev_cell_btn.clicked.connect(self.previousCellClicked.emit)
-        self.skip_cell_btn.clicked.connect(self.skipCellClicked.emit)
-        self.keep_cell_btn.clicked.connect(self.keepCellClicked.emit)
-        self.process_cells_btn.clicked.connect(self.processCellsClicked.emit)
-
-
-# ============================
-# Content Area Widget
-# ============================
 class ContentAreaWidget(QWidget):
-    # Signals to propagate changes from the content area.
+    """
+    Content area of the Cell Image View, containing the cell image, sliders, and info panel.
+    """
     cellSliderChanged = pyqtSignal(int)
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
@@ -78,16 +32,15 @@ class ContentAreaWidget(QWidget):
         self._init_image_display()
         
         # --- Overlay Checkbox ---
-        self.overlay_checkbox = QCheckBox("Overlay mask")
-        self.overlay_checkbox.setChecked(False)
-        self.overlay_checkbox.toggled.connect(lambda checked: self.overlayToggled.emit(checked))
-        self.layout.addWidget(self.overlay_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+        self._init_overlay_checkbox()
         
         # --- Frame Slider Area ---
         self._init_frame_slider_area()
 
     def _init_info_panel(self) -> None:
-        """Builds the info panel to show cell number, ratio, and a selected cells counter."""
+        """
+        Builds the info panel to show cell number, ratio, and a selected cells counter.
+        """
         self.info_widget = QWidget()
         info_layout = QHBoxLayout(self.info_widget)
         info_layout.setContentsMargins(0, 0, 0, 0)
@@ -118,7 +71,9 @@ class ContentAreaWidget(QWidget):
         self.layout.addWidget(self.info_widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def _init_cell_slider(self) -> None:
-        """Creates a horizontal slider for selecting cells."""
+        """
+        Creates a horizontal slider for selecting cells.
+        """
         self.cell_slider_area = QVBoxLayout()
         self.cell_slider = QSlider(Qt.Orientation.Horizontal)
         self.cell_slider.setMinimum(1)
@@ -132,8 +87,7 @@ class ContentAreaWidget(QWidget):
 
     def _init_image_display(self) -> None:
         """
-        Sets up the image display area including an overlay indicator.
-        The image and state indicator are placed in a grid layout to allow overlap.
+        Sets up the image display area including an overlay indicator. The image and state indicator are placed in a grid layout to allow overlap.
         """
         self.image_container = QWidget()
         self.image_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -155,8 +109,19 @@ class ContentAreaWidget(QWidget):
         
         self.layout.addWidget(self.image_container)
 
+    def _init_overlay_checkbox(self) -> None:
+        """
+        Creates a checkbox for overlaying the mask on the image.
+        """
+        self.overlay_checkbox = QCheckBox("Overlay mask")
+        self.overlay_checkbox.setChecked(False)
+        self.overlay_checkbox.toggled.connect(lambda checked: self.overlayToggled.emit(checked))
+        self.layout.addWidget(self.overlay_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+    
     def _init_frame_slider_area(self) -> None:
-        """Creates the frame slider area with its title and numbered labels."""
+        """
+        Creates the frame slider area with its title and numbered labels.
+        """
         self.slider_area_layout = QVBoxLayout()
         self.slider_title = QLabel("Frames")
         self.slider_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -186,12 +151,21 @@ class ContentAreaWidget(QWidget):
         self.layout.addLayout(self.slider_area_layout)
 
     def _on_cell_slider_value_changed(self, value: int) -> None:
+        """
+        Updates the cell info label when the slider value changes.
+        """
         self.cell_info_label.setText(f"Cell {value}/{self.total_cells}")
 
-    # Public methods to update the view from outside:
-
-    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float,
-                      processed: bool, selected_count: int) -> None:
+    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
+        """
+        Updates the cell info panel with the current cell number, total cells, ratio, and processed state.
+        Args:
+            cell_number: Current cell number.
+            total_cells: Total number of cells.
+            cell_ratio: Ratio of the current cell.
+            processed: Indicates if the cell has been processed.
+            selected_count: Number of selected cells.
+        """
         self.total_cells = total_cells
         self.cell_info_label.setText(f"Cell {cell_number+1}/{total_cells}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
@@ -200,87 +174,36 @@ class ContentAreaWidget(QWidget):
         self.selected_cells_value_label.setText(str(selected_count))
         if processed:
             self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(
-                "background: rgba(0,0,0,0); font-size: 24px; color: green;"
-            )
+            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: green;")
         else:
             self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(
-                "background: rgba(0,0,0,0); font-size: 24px; color: red;"
-            )
+            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
 
-    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float,
-                            processed: bool, selected_count: int) -> None:
+    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
+        """
+        Updates the info panel with a preview of the cell information. This is used to show the information without changing the slider value.
+        Args:
+            cell_number: Current cell number.
+            total_cells: Total number of cells.
+            cell_ratio: Ratio of the current cell.
+            processed: Indicates if the cell has been processed.
+            selected_count: Number of selected cells.
+        """
         self.cell_info_label.setText(f"Cell {cell_number+1}/{total_cells}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
         self.selected_cells_value_label.setText(str(selected_count))
         if processed:
             self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(
-                "background: rgba(0,0,0,0); font-size: 24px; color: green;"
-            )
+            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: green;")
         else:
             self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(
-                "background: rgba(0,0,0,0); font-size: 24px; color: red;"
-            )
+            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
 
     def setImage(self, pixmap: QPixmap) -> None:
+        """
+        Sets the image in the display area. The image is scaled to fit the label.
+        Args:
+            pixmap: The QPixmap to display.
+        """
         self.image_label.setPixmap(pixmap)
 
-
-# ============================
-# Main View Composing the Subclasses
-# ============================
-class CellImageView(QMainWindow):
-    # Define signals to propagate actions from the subwidgets.
-    backClicked = pyqtSignal()
-    previousCellClicked = pyqtSignal()
-    skipCellClicked = pyqtSignal()
-    keepCellClicked = pyqtSignal()
-    processCellsClicked = pyqtSignal()
-    cellSliderChanged = pyqtSignal(int)
-    frameChanged = pyqtSignal(int)
-    overlayToggled = pyqtSignal(bool)
-    
-    def __init__(self, n_frames: int) -> None:
-        super().__init__()
-        self.setWindowTitle("Cell Image View")
-        self.resize(1200, 800)
-        self.n_frames = n_frames
-
-        # Initialize central widget and main layout.
-        self.main_widget = QWidget()
-        self.setCentralWidget(self.main_widget)
-        self.main_layout = QVBoxLayout(self.main_widget)
-        
-        # Create and inject subwidgets.
-        self.top_bar = TopBarWidget()
-        self.content_area = ContentAreaWidget(n_frames)
-        self.bottom_bar = BottomBarWidget()
-        
-        self.main_layout.addWidget(self.top_bar)
-        self.main_layout.addWidget(self.content_area, stretch=1)
-        self.main_layout.addWidget(self.bottom_bar)
-        
-        # Connect subwidget signals to the main view's signals.
-        self.top_bar.backClicked.connect(self.backClicked.emit)
-        self.bottom_bar.previousCellClicked.connect(self.previousCellClicked.emit)
-        self.bottom_bar.skipCellClicked.connect(self.skipCellClicked.emit)
-        self.bottom_bar.keepCellClicked.connect(self.keepCellClicked.emit)
-        self.bottom_bar.processCellsClicked.connect(self.processCellsClicked.emit)
-        self.content_area.cellSliderChanged.connect(self.cellSliderChanged.emit)
-        self.content_area.frameChanged.connect(self.frameChanged.emit)
-        self.content_area.overlayToggled.connect(self.overlayToggled.emit)
-    
-    # Methods to update the content area.
-    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float,
-                      processed: bool, selected_count: int) -> None:
-        self.content_area.set_cell_info(cell_number, total_cells, cell_ratio, processed, selected_count)
-    
-    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float,
-                            processed: bool, selected_count: int) -> None:
-        self.content_area.update_info_preview(cell_number, total_cells, cell_ratio, processed, selected_count)
-    
-    def setImage(self, pixmap: QPixmap) -> None:
-        self.content_area.setImage(pixmap)

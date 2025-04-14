@@ -7,7 +7,7 @@ import numpy as np
 from scipy.ndimage import binary_dilation
 
 from backend.data_loader import DataLoader
-from gui.views.cell_image_view import CellImageView
+from celltinder.gui.views.cell_view_manager import CellViewManager
 
 # Constants for figure size and DPI
 FIG_SIZE = (5, 5)  # inches
@@ -27,7 +27,7 @@ CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                         'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
 class CellImageController:
-    def __init__(self, data_loader: DataLoader, view: CellImageView) -> None:
+    def __init__(self, data_loader: DataLoader, view: CellViewManager) -> None:
         
         self.data = data_loader
         self.data.add_process_col()
