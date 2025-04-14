@@ -20,6 +20,8 @@ class DataLoader:
         
         self.csv_path: Path = csv_file
         self.df = pd.read_csv(csv_file)
+        if 'Unnamed: 0' in self.df.columns:
+            self.df.drop(columns=['Unnamed: 0'], inplace=True)
         self.ratios = self.df[DEFAULT_COL_NAME]
         
         # Set default thresholds

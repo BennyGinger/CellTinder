@@ -4,9 +4,9 @@ from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-from celltinder.gui.views.areas.top_bar_view import TopBarWidget
-from celltinder.gui.views.areas.bottom_bar_view import BottomBarWidget
-from celltinder.gui.views.areas.content_area_view import ContentAreaWidget
+from celltinder.gui.views.cell_image_view.top_bar_view import TopBarWidget
+from celltinder.gui.views.cell_image_view.bottom_bar_view import BottomBarWidget
+from celltinder.gui.views.cell_image_view.content_area_view import ContentAreaWidget
 
 
 class CellViewManager(QMainWindow):
@@ -31,6 +31,17 @@ class CellViewManager(QMainWindow):
         self.main_layout = QVBoxLayout(self.main_widget)
         
         # Create and inject subwidgets.
+        self._init_ui_components(n_frames)
+        
+        # Connect subwidget signals to the main view's signals.
+        self._connect_signals()
+
+    def _init_ui_components(self, n_frames: int) -> None:
+        """
+        Initializes the UI components of the CellViewManager.
+        Args:
+            n_frames: Number of frames to be displayed.
+        """
         self.top_bar = TopBarWidget()
         self.content_area = ContentAreaWidget(n_frames)
         self.bottom_bar = BottomBarWidget()
@@ -38,8 +49,11 @@ class CellViewManager(QMainWindow):
         self.main_layout.addWidget(self.top_bar)
         self.main_layout.addWidget(self.content_area, stretch=1)
         self.main_layout.addWidget(self.bottom_bar)
-        
-        # Connect subwidget signals to the main view's signals.
+
+    def _connect_signals(self) -> None:
+        """
+        Connect signals from subwidgets to the main view's signals.
+        """
         self.top_bar.backClicked.connect(self.backClicked.emit)
         self.bottom_bar.previousCellClicked.connect(self.previousCellClicked.emit)
         self.bottom_bar.skipCellClicked.connect(self.skipCellClicked.emit)

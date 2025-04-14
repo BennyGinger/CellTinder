@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.histo_view import HistogramView
+from celltinder.gui.views.histogram_view.histo_view_manager import HistoViewManager
 
 
 class HistogramController:
-    def __init__(self, model: DataLoader, view: HistogramView):
+    def __init__(self, model: DataLoader, view: HistoViewManager):
         self.model = model
         self.view = view
         
@@ -20,7 +20,7 @@ class HistogramController:
         # Connect view signals to controller methods
         self.view.lower_edit.editingFinished.connect(self.on_threshold_change)
         self.view.upper_edit.editingFinished.connect(self.on_threshold_change)
-        self.view.next_button.clicked.connect(self.on_next_pressed)
+        self.view.to_cellview_button.clicked.connect(self.on_to_cellview_pressed)
         
         # Draw the initial plot
         self.view.update_plot(self.model.default_lower, self.model.default_upper, self.model.ratios)
@@ -33,7 +33,7 @@ class HistogramController:
         self.view.update_count(count)
         self.view.update_plot(lower_val, upper_val, self.model.ratios)
 
-    def on_next_pressed(self):
+    def on_to_cellview_pressed(self):
         """Add a new column to the DataFrame based on the current threshold values."""
         
         # Get the threshold values from the view and create a column name

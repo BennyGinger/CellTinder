@@ -9,7 +9,7 @@ import numpy as np
 from scipy.ndimage import binary_dilation
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.cell_view_manager import CellViewManager
+from celltinder.gui.views.cell_image_view.cell_view_manager import CellViewManager
 
 # Constants for figure size and DPI
 FIG_SIZE = (5, 5)  # inches
