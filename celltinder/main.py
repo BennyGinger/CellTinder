@@ -2,11 +2,11 @@ import sys
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
-from backend.data_loader import DataLoader
-from gui.views.cell_view_manager import CellViewManager
-from gui.controllers.cell_image_control import CellImageController
-from gui.views.histo_view import HistogramView
-from gui.controllers.histo_control import HistogramController
+from celltinder.backend.data_loader import DataLoader
+from celltinder.gui.views.cell_view_manager import CellViewManager
+from celltinder.gui.controllers.cell_control import CellController
+from celltinder.gui.views.histo_view import HistogramView
+from celltinder.gui.controllers.histo_control import HistogramController
 
 
 def main(csv_path: Path) -> None:
@@ -28,7 +28,7 @@ def main2(csv_path: Path, n_frames: int = 2, box_size: int = 150) -> None:
     
     view = CellViewManager(n_frames)
     
-    controller = CellImageController(data, view)
+    controller = CellController(data, view)
     controller.view.show()
     sys.exit(app.exec())
 

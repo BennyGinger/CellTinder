@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-from gui.views.areas.top_bar_view import TopBarWidget
-from gui.views.areas.bottom_bar_view import BottomBarWidget
-from gui.views.areas.content_area_view import ContentAreaWidget
+from celltinder.gui.views.areas.top_bar_view import TopBarWidget
+from celltinder.gui.views.areas.bottom_bar_view import BottomBarWidget
+from celltinder.gui.views.areas.content_area_view import ContentAreaWidget
 
 
 class CellViewManager(QMainWindow):

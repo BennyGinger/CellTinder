@@ -1,25 +1,33 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import pandas as pd
 
-from backend.cell_image_set import CellImageSet
+from celltinder.backend.cell_image_set import CellImageSet
 
-   
+
+DEFAULT_COL_NAME = 'ratio'
+# TODO: implement a frame column in the csv file -> self.n_frames can then be set automatically
+
 class DataLoader:
-    """Class to load and filter data from a CSV file. Specific to your our pipeline."""
+    """
+    Class to load and filter data from a CSV file. Specific to your our pipeline.
+    """
     
     def __init__(self, csv_file: Path) -> None:
         """Initialize the LoadData object with a CSV file."""
         
         self.csv_path: Path = csv_file
         self.df = pd.read_csv(csv_file)
-        self.ratios = self.df['ratio']
+        self.ratios = self.df[DEFAULT_COL_NAME]
+        
         # Set default thresholds
         self.lower = self.default_lower
         self.upper = self.default_upper
-        self.column_thresholds = 'ratio'
+        self.column_thresholds = DEFAULT_COL_NAME
 
-    def filter_data(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
+    def filter_data(self, lower: float, upper: float, col_name: str = DEFAULT_COL_NAME) -> pd.DataFrame:
         """
         Filter the data based on the lower and upper thresholds.
         Args:
@@ -57,7 +65,7 @@ class DataLoader:
         """
         self.df.to_csv(self.csv_path, index=False)
 
-    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, crop_size: int = 151) -> CellImageSet:
+    def loads_arrays(self, cell_idx: int, img_label: str, mask_label: str, n_frames: int, crop_size: int) -> CellImageSet:
         """
         Load and crop all images or masks for a specific cell.
         
@@ -125,6 +133,6 @@ class DataLoader:
     
     @property
     def pos_df(self) -> pd.DataFrame:
-        """Return the DataFrame containing positive cells sorted by ratio."""
+        """Return the DataFrame containing positive cells sorted by DEFAULT_COL_NAME."""
         
-        return self.filter_data(self.lower, self.upper, self.column_thresholds).sort_values(by='ratio', ascending=False)
+        return self.filter_data(self.lower, self.upper, self.column_thresholds).sort_values(by=DEFAULT_COL_NAME, ascending=False)

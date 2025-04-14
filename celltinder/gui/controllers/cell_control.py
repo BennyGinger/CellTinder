@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -6,7 +8,7 @@ from PyQt6.QtGui import QPixmap, QImage
 import numpy as np
 from scipy.ndimage import binary_dilation
 
-from backend.data_loader import DataLoader
+from celltinder.backend.data_loader import DataLoader
 from celltinder.gui.views.cell_view_manager import CellViewManager
 
 # Constants for figure size and DPI
@@ -26,17 +28,55 @@ CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                         'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
                         'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
-class CellImageController:
-    def __init__(self, data_loader: DataLoader, view: CellViewManager) -> None:
+class CellController:
+    """
+    Initialize the CellController with a DataLoader and a CellViewManager.
+    Args:
+        data_loader (DataLoader): The data loader to fetch images and masks.
+        view (CellViewManager): The view manager for displaying the cell images.
+        img_label (str): The label for the image data.
+        mask_label (str): The label for the mask data.
+        n_frames (int): The number of frames to display.
+        crop_size (int): The size of the crop for the images.
+    """
+    def __init__(self, data_loader: DataLoader, view: CellViewManager, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, crop_size: int = 151) -> None:
         
+        # Initialize the data loader and DataFrame.
+        self._init_data_loader(data_loader, img_label, mask_label, n_frames, crop_size)          
+
+        # Setup view and connect signals...
+        self._init_view(view)
+
+        # Load the first cell using its index from the df.
+        self._load_cell()
+
+    #----------------
+    # Controller Methods
+    #----------------
+
+    def _init_data_loader(self, data_loader: DataLoader, img_label: str, mask_label: str, n_frames: int, crop_size: int) -> None:
+        """
+        Initialize the data loader and DataFrame. 
+        """
+        # Set the image and mask labels.
+        self.img_label = img_label
+        self.mask_label = mask_label
+        self.n_frames = n_frames
+        self.crop_size = crop_size
+        
+        # Extract the DataFrame from the data loader. Add a process column to it.
         self.data = data_loader
         self.data.add_process_col()
         self.df = self.data.pos_df
-        # Starting index for the positive cells
+        
+        # Set the initial index and frame.
         self.current_idx = 0
-        self.current_frame = 1          
+        self.current_frame = 1
 
-        # Setup view and connect signals...
+    def _init_view(self, view: CellViewManager) -> None:
+        """
+        Initialize the view and connect signals to the controller methods.
+        """
         self.view = view
         self.view.total_cells = len(self.df)
         self.view.previousCellClicked.connect(self.on_previous_cell)
@@ -50,18 +90,15 @@ class CellImageController:
 
         # Set the initial size of the view.
         self.view.adjustSize()
-
-        # Load the first cell using its index from the df.
-        self._load_cell()
-
+    
     def _load_cell(self) -> None:
         """
         Load the current cell based on the current index.
         """
         # Use the DataLoader to fetch the images and masks for the current cell.
-        cell_image_set = self.data.loads_arrays(self.current_idx)
+        self.current_cell = self.data.loads_arrays(self.current_idx, self.img_label, self.mask_label, self.n_frames, self.crop_size)
+        
         # Update the view with new cell info.
-        self.current_cell = cell_image_set
         self._update_view()
         
     def _update_view(self) -> None:
@@ -177,6 +214,20 @@ class CellImageController:
         # Set the image in the view.
         self.view.setImage(pixmap)
     
+    def _move_to_next_cell(self) -> None:
+        """
+        Move to the next cell in the DataFrame. If at the end, loop back to the start.
+        """
+        if self.current_idx < len(self.df) - 1:
+            self.current_idx += 1
+        else:
+            self.current_idx = 0
+        self._load_cell()
+    
+    # ----------------
+    # Event Handlers
+    # ----------------
+    
     def on_frame_changed(self, frame: int) -> None:
         """
         Handle the event when the frame slider is changed. Update the current frame and refresh the image.
@@ -233,16 +284,6 @@ class CellImageController:
         selected_count = int(self.df['process'].sum())
         # Update the info panel (and overlay indicator) without loading a new image.
         self.view.update_info_preview(index, self.total_cells, ratio, processed, selected_count)
-
-    def _move_to_next_cell(self) -> None:
-        """
-        Move to the next cell in the DataFrame. If at the end, loop back to the start.
-        """
-        if self.current_idx < len(self.df) - 1:
-            self.current_idx += 1
-        else:
-            self.current_idx = 0
-        self._load_cell()
 
     def on_process_cells(self) -> None:
         """

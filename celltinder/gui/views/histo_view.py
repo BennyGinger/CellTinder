@@ -36,9 +36,10 @@ class HistogramView(BaseView):
         self.next_button = QPushButton("Next")
         self.create_bottom_bar([self.next_button], alignment=Qt.AlignmentFlag.AlignRight)
 
-    
     def _create_controls(self) -> None:
-        """Create controls for threshold inputs and cell count display."""
+        """
+        Create controls for threshold inputs and cell count display.
+        """
         
         self.controls_layout = QHBoxLayout()
         
@@ -78,12 +79,16 @@ class HistogramView(BaseView):
         self.controls_layout.addLayout(self.count_layout)
         self.main_layout.addLayout(self.controls_layout)
     
-    # Public methods for updating UI elements
     def update_count(self, count: int) -> None:
+        """
+        Update the cell count display.
+        """
         self.count_display.setText(str(count))
     
     def update_plot(self, lower_val: float, upper_val: float, ratios: list) -> None:
-        """Update the histogram plot with new threshold values."""
+        """
+        Update the histogram plot with new threshold values.
+        """
         self.figure.clear()
         ax = self.figure.add_subplot(111)
         ax.hist(ratios, bins=50, color='blue', alpha=0.7)
@@ -96,7 +101,9 @@ class HistogramView(BaseView):
         self.canvas.draw()
     
     def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
-        """Extract and validate threshold values from the input fields."""
+        """
+        Extract and validate threshold values from the input fields.
+        """
         try:
             lower_val = float(self.lower_edit.text())
         except ValueError:
