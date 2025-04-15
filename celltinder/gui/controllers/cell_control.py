@@ -9,7 +9,7 @@ import numpy as np
 from scipy.ndimage import binary_dilation
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.cell_image_view.cell_view_manager import CellViewManager
+from celltinder.gui.views.cell_main_view import CellViewWidget
 
 # Constants for figure size and DPI
 FIG_SIZE = (5, 5)  # inches
@@ -39,7 +39,7 @@ class CellController:
         n_frames (int): The number of frames to display.
         crop_size (int): The size of the crop for the images.
     """
-    def __init__(self, data_loader: DataLoader, view: CellViewManager, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, crop_size: int = 151) -> None:
+    def __init__(self, data_loader: DataLoader, view: CellViewWidget, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, crop_size: int = 151) -> None:
         
         # Initialize the data loader and DataFrame.
         self._init_data_loader(data_loader, img_label, mask_label, n_frames, crop_size)          
@@ -73,7 +73,7 @@ class CellController:
         self.current_idx = 0
         self.current_frame = 1
 
-    def _init_view(self, view: CellViewManager) -> None:
+    def _init_view(self, view: CellViewWidget) -> None:
         """
         Initialize the view and connect signals to the controller methods.
         """
@@ -91,6 +91,15 @@ class CellController:
         # Set the initial size of the view.
         self.view.adjustSize()
     
+    def reset_state(self) -> None:
+        """
+        Reset internal pointers and reload the first cell.
+        """
+        self.current_idx = 0
+        self.current_frame = 1
+        # Ensure the slider maximum is updated.
+        self._load_cell()
+
     def _load_cell(self) -> None:
         """
         Load the current cell based on the current index.

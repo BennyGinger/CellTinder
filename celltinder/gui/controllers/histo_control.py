@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from PyQt6.QtCore import pyqtSignal, QObject
+
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.histogram_view.histo_view_manager import HistoViewManager
+from celltinder.gui.views.histo_main_view import HistoViewWidget
 
 
-class HistogramController:
-    def __init__(self, model: DataLoader, view: HistoViewManager):
+class HistogramController(QObject):
+    # Signal to notify when the threshold values change
+    thresholdChanged = pyqtSignal()
+    
+    def __init__(self, model: DataLoader, view: HistoViewWidget):
+        super().__init__()
         self.model = model
         self.view = view
         
@@ -25,16 +31,23 @@ class HistogramController:
         # Draw the initial plot
         self.view.update_plot(self.model.default_lower, self.model.default_upper, self.model.ratios)
     
-    def on_threshold_change(self):
-        """Update the cell count and plot when the threshold values change."""
+    def on_threshold_change(self) -> None:
+        """
+        Update the cell count and plot when the threshold values change.
+        """
         
         lower_val, upper_val = self.view.get_threshold_values(self.model.default_lower, self.model.default_upper)
         count = self.model.get_cell_count(lower_val, upper_val)
         self.view.update_count(count)
         self.view.update_plot(lower_val, upper_val, self.model.ratios)
+        
+        # Emit signal so that the master can trigger the cell view reset
+        self.thresholdChanged.emit()
 
-    def on_to_cellview_pressed(self):
-        """Add a new column to the DataFrame based on the current threshold values."""
+    def on_to_cellview_pressed(self) -> None:
+        """
+        Add a new column to the DataFrame based on the current threshold values.
+        """
         
         # Get the threshold values from the view and create a column name
         lower_val, upper_val = self.view.get_threshold_values(self.model.default_lower, self.model.default_upper)
@@ -54,4 +67,6 @@ class HistogramController:
         self.model.df[column_name] = self.model.df['ratio'].apply(lambda x: lower_val < x < upper_val)
         self.model.update_thresholds(lower_val, upper_val, column_name)
         self.model.save_csv()
-        # Optionally: move to the next step in the workflow
+        
+        # Emit the signal to switch to the cell view
+        self.view.toCellViewClicked.emit()

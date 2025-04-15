@@ -3,16 +3,16 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.cell_image_view.cell_view_manager import CellViewManager
+from celltinder.gui.views.cell_main_view import CellViewWidget
 from celltinder.gui.controllers.cell_control import CellController
-from celltinder.gui.views.histogram_view.histo_view_manager import HistoViewManager
+from celltinder.gui.views.histo_main_view import HistoViewWidget
 from celltinder.gui.controllers.histo_control import HistogramController
 
 
 def main(csv_path: Path) -> None:
     app = QApplication(sys.argv)
     data = DataLoader(csv_path)
-    view = HistoViewManager()
+    view = HistoViewWidget()
     
     controller = HistogramController(data, view)
     controller.view.show()
@@ -26,7 +26,7 @@ def main2(csv_path: Path, n_frames: int = 2, box_size: int = 150) -> None:
     app = QApplication(sys.argv)
     data = DataLoader(csv_path)
     
-    view = CellViewManager(n_frames)
+    view = CellViewWidget(n_frames)
     
     controller = CellController(data, view)
     controller.view.show()
