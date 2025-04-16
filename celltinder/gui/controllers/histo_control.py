@@ -1,5 +1,5 @@
-from backend.data_loader import DataLoader
-from gui.views.histo_view import HistogramView
+from celltinder.backend.data_loader import DataLoader
+from celltinder.gui.views.histo_view import HistogramView
 
 
 class HistogramController:

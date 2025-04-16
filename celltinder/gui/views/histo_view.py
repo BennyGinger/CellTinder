@@ -193,12 +193,15 @@ class HistogramController:
         self.model = model
         self.view = view
         
+        # Check if the DataFrame contains a threshold column that follows the pattern "float < x < float"
+        displayed_lower, displayed_upper = self.model.retrieve_threshold_range()
+        
         # Set default threshold values in the view
-        self.view.lower_edit.setText(str(round(self.model.default_lower, 2)))
-        self.view.upper_edit.setText(str(round(self.model.default_upper, 2)))
+        self.view.lower_edit.setText(str(round(displayed_lower, 2)))
+        self.view.upper_edit.setText(str(round(displayed_upper, 2)))
         
         # Initialize display with current cell count
-        initial_count = self.model.get_cell_count(self.model.default_lower, self.model.default_upper)
+        initial_count = self.model.get_cell_count(displayed_lower, displayed_upper)
         self.view.update_count(initial_count)
         
         # Connect view signals to controller methods
@@ -207,7 +210,7 @@ class HistogramController:
         self.view.next_button.clicked.connect(self.on_next_pressed)
         
         # Draw the initial plot
-        self.view.update_plot(self.model.default_lower, self.model.default_upper, self.model.ratios)
+        self.view.update_plot(displayed_lower, displayed_upper, self.model.ratios)
     
     def on_threshold_change(self) -> None:
         """

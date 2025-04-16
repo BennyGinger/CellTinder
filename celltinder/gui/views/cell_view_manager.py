@@ -2,9 +2,9 @@ from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-from gui.views.cell_image_view.top_bar_view import TopBarWidget
-from gui.views.cell_image_view.bottom_bar_view import BottomBarWidget
-from gui.views.cell_image_view.content_area_view import ContentAreaWidget
+from celltinder.gui.views.cell_image_view.top_bar_view import TopBarWidget
+from celltinder.gui.views.cell_image_view.bottom_bar_view import BottomBarWidget
+from celltinder.gui.views.cell_image_view.content_area_view import ContentAreaWidget
 
 
 class CellViewManager(QMainWindow):

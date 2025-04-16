@@ -2,11 +2,10 @@ import sys
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
-from backend.data_loader import DataLoader
-from gui.views.cell_view_manager import CellViewManager
-from gui.controllers.cell_image_control import CellImageController
-from gui.views.histo_view import HistogramView
-from gui.controllers.histo_control import HistogramController
+from celltinder.backend.data_loader import DataLoader
+from celltinder.gui.views.cell_view_manager import CellViewManager
+from celltinder.gui.controllers.cell_image_control import CellImageController
+from celltinder.gui.views.histo_view import HistogramView, HistogramController
 
 
 def main(csv_path: Path) -> None:
@@ -37,4 +36,4 @@ if __name__ == '__main__':
     
     csv_path = Path("/media/ben/Analysis/Python/CellTinder/ImagesTest/A1/A1_cell_data.csv")
     # csv_path = Path("/home/ben/Lab/Python/CellTinder/ImagesTest/20250320_test_short/A1/A1_cell_data.csv")
-    main(csv_path)
+    main2(csv_path)

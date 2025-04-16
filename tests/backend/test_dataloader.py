@@ -45,7 +45,7 @@ def test_default_thresholds(sample_csv: Path):
 def test_filter_data(sample_csv: Path):
     loader = DataLoader(sample_csv)
     # Filter to only include rows where ratio is between 0.3 and 0.9
-    filtered = loader.filter_data(0.3, 0.9)
+    filtered = loader.filter_ratio(0.3, 0.9)
     # Should filter out the first row (0.1) and keep rows with 0.5 and 0.8
     assert len(filtered) == 2
     assert (filtered['ratio'] >= 0.3).all() and (filtered['ratio'] <= 0.9).all()

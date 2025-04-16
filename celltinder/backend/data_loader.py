@@ -1,8 +1,9 @@
 from pathlib import Path
+import re
 
 import pandas as pd
 
-from backend.cell_image_set import CellImageSet
+from celltinder.backend.cell_image_set import CellImageSet
 
    
 class DataLoader:
@@ -15,11 +16,9 @@ class DataLoader:
         self.df = pd.read_csv(csv_file)
         self.ratios = self.df['ratio']
         # Set default thresholds
-        self.lower = self.default_lower
-        self.upper = self.default_upper
-        self.column_thresholds = 'ratio'
+        self.retrieve_threshold_range()
 
-    def filter_data(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
+    def filter_ratio(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
         """
         Filter the data based on the lower and upper thresholds.
         Args:
@@ -40,7 +39,7 @@ class DataLoader:
         Returns:
             int: Number of cells within the thresholds
         """
-        filtered = self.filter_data(lower, upper)
+        filtered = self.filter_ratio(lower, upper)
         return len(filtered)
     
     def update_thresholds(self, lower: float, upper: float, new_column: str) -> None:
@@ -113,6 +112,31 @@ class DataLoader:
         
         self.df.update(pos_df)
     
+    def retrieve_threshold_range(self) -> tuple[float, float]:
+        """
+        Check if the DataFrame contains a threshold column that follows the pattern "float < x < float".
+        If found, extract the lower and upper bounds; otherwise, use default values.
+        """
+        threshold_cols = [col for col in self.df.columns if "< x <" in col]
+        if threshold_cols:
+            # Extract the two float values using a regex pattern.
+            pattern = r"([\d\.]+)\s*<\s*x\s*<\s*([\d\.]+)"
+            match = re.match(pattern, threshold_cols[0])
+            if match:
+                lower_bound = float(match.group(1))
+                upper_bound = float(match.group(2))
+                self.update_thresholds(lower_bound, upper_bound, threshold_cols[0])
+            else:
+                # Fall back to default values if regex fails.
+                lower_bound = self.default_lower
+                upper_bound = self.default_upper
+        else:
+            # If no threshold column is found, set default values.
+            lower_bound = self.default_lower
+            upper_bound = self.default_upper
+            self.update_thresholds(self.default_lower, self.default_upper, None)
+        return lower_bound, upper_bound
+    
     @property
     def default_lower(self) -> float:
         """Return the default lower threshold."""
@@ -126,5 +150,6 @@ class DataLoader:
     @property
     def pos_df(self) -> pd.DataFrame:
         """Return the DataFrame containing positive cells sorted by ratio."""
-        
-        return self.filter_data(self.lower, self.upper, self.column_thresholds).sort_values(by='ratio', ascending=False)
+        if self.column_thresholds is None:
+            raise ValueError("No threshold column found. Please set thresholds first.")
+        return self.df.loc[self.df[self.column_thresholds] == True].sort_values(by='ratio', ascending=False)
