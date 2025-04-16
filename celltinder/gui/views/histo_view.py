@@ -1,89 +1,36 @@
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
-from gui.views.base_view import BaseView
+from celltinder.backend.data_loader import DataLoader
 
-
-class HistogramView(BaseView):
-    """View class for the histogram GUI."""
-    
-    def __init__(self) -> None:
-        """Initialize the HistogramView with a layout and controls."""
-        
-        super().__init__("Histogram GUI")
-        
-        # Set up the matplotlib figure and canvas
+class GraphWidget(QWidget):
+    """
+    Widget that displays the matplotlib graph along with its navigation toolbar.
+    """
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
         self.figure = Figure(figsize=(6, 4))
         self.canvas = FigureCanvas(self.figure)
-        self.main_layout.addWidget(self.canvas)
-        
-        # Add the navigation toolbar
         self.toolbar = NavigationToolbar(self.canvas, self)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.canvas)
+
+        # Create a toolbar layout with center alignment
         toolbar_layout = QHBoxLayout()
         toolbar_layout.addStretch()
         toolbar_layout.addWidget(self.toolbar)
         toolbar_layout.addStretch()
-        self.main_layout.addLayout(toolbar_layout)
-        
-        # Create the threshold and cell count controls
-        self._create_controls()
-        
-        # Create the Next button in the bottom bar
-        self.next_button = QPushButton("Next")
-        self.create_bottom_bar([self.next_button], alignment=Qt.AlignmentFlag.AlignRight)
+        layout.addLayout(toolbar_layout)
 
-    
-    def _create_controls(self) -> None:
-        """Create controls for threshold inputs and cell count display."""
-        
-        self.controls_layout = QHBoxLayout()
-        
-        # Lower Threshold Input
-        self.lower_layout = QVBoxLayout()
-        self.lower_label = QLabel("Lower Threshold")
-        self.lower_edit = QLineEdit()
-        self.lower_edit.setFixedWidth(120)
-        self.lower_edit.setStyleSheet("color: red;")
-        self.lower_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
-        self.lower_layout.addWidget(self.lower_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.lower_layout.addWidget(self.lower_edit, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        # Upper Threshold Input
-        self.upper_layout = QVBoxLayout()
-        self.upper_label = QLabel("Upper Threshold")
-        self.upper_edit = QLineEdit()
-        self.upper_edit.setFixedWidth(120)
-        self.upper_edit.setStyleSheet("color: green;")
-        self.upper_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
-        self.upper_layout.addWidget(self.upper_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.upper_layout.addWidget(self.upper_edit, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        # Cell Count Display
-        self.count_layout = QVBoxLayout()
-        self.count_label = QLabel("Cell Count")
-        self.count_display = QLabel("0")
-        self.count_display.setFixedWidth(120)
-        self.count_display.setStyleSheet("font-weight: bold;")
-        self.count_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.count_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.count_layout.addWidget(self.count_display, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        # Combine into the controls layout
-        self.controls_layout.addLayout(self.lower_layout)
-        self.controls_layout.addLayout(self.upper_layout)
-        self.controls_layout.addLayout(self.count_layout)
-        self.main_layout.addLayout(self.controls_layout)
-    
-    # Public methods for updating UI elements
-    def update_count(self, count: int) -> None:
-        self.count_display.setText(str(count))
-    
     def update_plot(self, lower_val: float, upper_val: float, ratios: list) -> None:
-        """Update the histogram plot with new threshold values."""
+        """
+        Update the histogram plot with new threshold values.
+        """
         self.figure.clear()
         ax = self.figure.add_subplot(111)
         ax.hist(ratios, bins=50, color='blue', alpha=0.7)
@@ -94,9 +41,61 @@ class HistogramView(BaseView):
         ax.set_title("Histogram of Ratio")
         ax.set_yscale('log', base=10)
         self.canvas.draw()
-    
+
+
+class ControlsWidget(QWidget):
+    """
+    Widget that contains the threshold input controls and cell count display.
+    """
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+
+        # Lower Threshold Input
+        lower_layout = QVBoxLayout()
+        self.lower_label = QLabel("Lower Threshold")
+        self.lower_edit = QLineEdit()
+        self.lower_edit.setFixedWidth(120)
+        self.lower_edit.setStyleSheet("color: red;")
+        self.lower_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
+        lower_layout.addWidget(self.lower_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        lower_layout.addWidget(self.lower_edit, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Upper Threshold Input
+        upper_layout = QVBoxLayout()
+        self.upper_label = QLabel("Upper Threshold")
+        self.upper_edit = QLineEdit()
+        self.upper_edit.setFixedWidth(120)
+        self.upper_edit.setStyleSheet("color: green;")
+        self.upper_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
+        upper_layout.addWidget(self.upper_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        upper_layout.addWidget(self.upper_edit, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Cell Count Display
+        count_layout = QVBoxLayout()
+        self.count_label = QLabel("Cell Count")
+        self.count_display = QLabel("0")
+        self.count_display.setFixedWidth(120)
+        self.count_display.setStyleSheet("font-weight: bold;")
+        self.count_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        count_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        count_layout.addWidget(self.count_display, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Combine the three sublayouts into a single controls layout
+        layout.addLayout(lower_layout)
+        layout.addLayout(upper_layout)
+        layout.addLayout(count_layout)
+
+    def update_count(self, count: int) -> None:
+        """
+        Update the cell count display.
+        """
+        self.count_display.setText(str(count))
+
     def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
-        """Extract and validate threshold values from the input fields."""
+        """
+        Extract and validate threshold values from the input fields.
+        """
         try:
             lower_val = float(self.lower_edit.text())
         except ValueError:
@@ -107,8 +106,139 @@ class HistogramView(BaseView):
         except ValueError:
             upper_val = round(default_upper, 2)
             self.upper_edit.setText(str(upper_val))
-        
+
         if lower_val >= upper_val:
             upper_val = lower_val + 0.01
             self.upper_edit.setText(str(round(upper_val, 2)))
         return lower_val, upper_val
+
+
+class BottomBarWidget(QWidget):
+    """
+    Widget that displays the bottom bar with a "Next" button.
+    """
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.addStretch()
+        self.next_button = QPushButton("Next")
+        layout.addWidget(self.next_button)
+
+
+class HistogramView(QMainWindow):
+    """
+    Main window for the histogram GUI.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Histogram GUI")
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+        self.main_layout = QVBoxLayout(self.main_widget)
+        self.resize(500, 500)
+
+        # Create and add the graph area (graph and toolbar)
+        self.graph_widget = GraphWidget()
+        self.main_layout.addWidget(self.graph_widget)
+
+        # Create and add the controls area (threshold inputs and cell count)
+        self.controls_widget = ControlsWidget()
+        self.main_layout.addWidget(self.controls_widget)
+
+        # Create and add the bottom bar with the "Next" button
+        self.bottom_bar = BottomBarWidget()
+        self.main_layout.addWidget(self.bottom_bar)
+
+    def update_plot(self, lower_val: float, upper_val: float, ratios: list) -> None:
+        """
+        Delegate plot updating to the GraphWidget.
+        """
+        self.graph_widget.update_plot(lower_val, upper_val, ratios)
+
+    def update_count(self, count: int) -> None:
+        """
+        Delegate count update to the ControlsWidget.
+        """
+        self.controls_widget.update_count(count)
+
+    def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
+        """
+        Delegate threshold value retrieval to the ControlsWidget.
+        """
+        return self.controls_widget.get_threshold_values(default_lower, default_upper)
+    
+    @property
+    def lower_edit(self) -> QLineEdit:
+        """
+        Property to access the lower threshold QLineEdit.
+        """
+        return self.controls_widget.lower_edit
+    
+    @property
+    def upper_edit(self) -> QLineEdit:
+        """
+        Property to access the upper threshold QLineEdit.
+        """
+        return self.controls_widget.upper_edit
+    
+    @property
+    def next_button(self) -> QPushButton:
+        """
+        Property to access the "Next" button.
+        """
+        return self.bottom_bar.next_button
+
+class HistogramController:
+    def __init__(self, model: DataLoader, view: HistogramView) -> None:
+        self.model = model
+        self.view = view
+        
+        # Set default threshold values in the view
+        self.view.lower_edit.setText(str(round(self.model.default_lower, 2)))
+        self.view.upper_edit.setText(str(round(self.model.default_upper, 2)))
+        
+        # Initialize display with current cell count
+        initial_count = self.model.get_cell_count(self.model.default_lower, self.model.default_upper)
+        self.view.update_count(initial_count)
+        
+        # Connect view signals to controller methods
+        self.view.lower_edit.editingFinished.connect(self.on_threshold_change)
+        self.view.upper_edit.editingFinished.connect(self.on_threshold_change)
+        self.view.next_button.clicked.connect(self.on_next_pressed)
+        
+        # Draw the initial plot
+        self.view.update_plot(self.model.default_lower, self.model.default_upper, self.model.ratios)
+    
+    def on_threshold_change(self) -> None:
+        """
+        Update the cell count and plot when the threshold values change.
+        """
+        
+        lower_val, upper_val = self.view.get_threshold_values(self.model.default_lower, self.model.default_upper)
+        count = self.model.get_cell_count(lower_val, upper_val)
+        self.view.update_count(count)
+        self.view.update_plot(lower_val, upper_val, self.model.ratios)
+
+    def on_next_pressed(self) -> None:
+        """
+        Add a new column to the DataFrame based on the current threshold values.
+        """
+        
+        # Get the threshold values from the view and create a column name
+        lower_val, upper_val = self.view.get_threshold_values(self.model.default_lower, self.model.default_upper)
+        column_name = f"{lower_val} < x < {upper_val}"
+        
+        # Find any column whose name contains "< x <", indicating a threshold column
+        threshold_cols = [col for col in self.model.df.columns if "< x <" in col]
+        
+        if threshold_cols:
+            # If found, drop them to ensure only one threshold column exists
+            self.model.df.drop(columns=threshold_cols, inplace=True)
+            print(f"Overwriting existing threshold columns {threshold_cols} with new column '{column_name}'.")
+        else:
+            print(f"New column '{column_name}' added to the DataFrame.")
+            
+        # Add a new column to the DataFrame based on the threshold values
+        self.model.df[column_name] = self.model.df['ratio'].apply(lambda x: lower_val < x < upper_val)
+        self.model.update_thresholds(lower_val, upper_val, column_name)
+        self.model.save_csv()
