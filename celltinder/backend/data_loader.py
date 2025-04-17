@@ -42,6 +42,7 @@ class DataLoader:
         filtered = self.filter_ratio(lower, upper)
         return len(filtered)
     
+    # TODO: Merge with retrieve_threshold_range
     def update_thresholds(self, lower: float, upper: float, new_column: str) -> None:
         """
         Update the thresholds and add a new column to the DataFrame.

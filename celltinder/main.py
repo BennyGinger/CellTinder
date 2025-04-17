@@ -3,8 +3,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.cell_view_manager import CellViewManager
-from celltinder.gui.controllers.cell_image_control import CellImageController
+from celltinder.gui.views.cell_view_manager import CellViewManager, CellImageController
 from celltinder.gui.views.histo_view import HistogramView, HistogramController
 
 

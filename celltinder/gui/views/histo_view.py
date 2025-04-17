@@ -42,7 +42,6 @@ class GraphWidget(QWidget):
         ax.set_yscale('log', base=10)
         self.canvas.draw()
 
-
 class ControlsWidget(QWidget):
     """
     Widget that contains the threshold input controls and cell count display.
@@ -112,7 +111,6 @@ class ControlsWidget(QWidget):
             self.upper_edit.setText(str(round(upper_val, 2)))
         return lower_val, upper_val
 
-
 class BottomBarWidget(QWidget):
     """
     Widget that displays the bottom bar with a "Next" button.
@@ -123,7 +121,6 @@ class BottomBarWidget(QWidget):
         layout.addStretch()
         self.next_button = QPushButton("Next")
         layout.addWidget(self.next_button)
-
 
 class HistogramView(QMainWindow):
     """
@@ -245,3 +242,4 @@ class HistogramController:
         self.model.df[column_name] = self.model.df['ratio'].apply(lambda x: lower_val < x < upper_val)
         self.model.update_thresholds(lower_val, upper_val, column_name)
         self.model.save_csv()
+
