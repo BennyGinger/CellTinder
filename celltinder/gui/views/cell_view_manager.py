@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy, QGridLayout
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QPixmap, QImage
+from PyQt6.QtGui import QPixmap, QImage, QResizeEvent
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
@@ -12,6 +12,124 @@ from celltinder.backend.data_loader import DataLoader
 from celltinder.gui.views.cell_image_view.top_bar_view import TopBarWidget
 from celltinder.gui.views.cell_image_view.bottom_bar_view import BottomBarWidget
 from celltinder.gui.views.cell_image_view.content_area_view import ContentAreaWidget
+
+
+from PyQt6.QtWidgets import QLabel, QCheckBox
+from PyQt6.QtCore    import Qt, QSize
+from PyQt6.QtGui     import QFont
+
+class ImageWithOverlays(QLabel):
+    """
+    QLabel that:
+      • preserves pixmap aspect‑ratio when resized
+      • carries two overlay widgets that auto‑reposition
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._orig = None     
+        self._default = QSize(500, 500)
+        self.setScaledContents(False)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+
+        # --- overlay 1 : state icon ---
+        self.state_lbl = QLabel("✗", self)
+        self.state_lbl.setStyleSheet("background:transparent; font-size: {FONT_SIZE}px; color: red;")
+
+        # --- overlay 2 : mask checkbox ---
+        self.mask_chk = QCheckBox("Overlay mask", self)
+        self.mask_chk.setStyleSheet("""
+                    QCheckBox::indicator {
+                        width: 15px;
+                        height: 15px;
+                        border-radius: 4px;
+                    }
+                    QCheckBox::indicator:unchecked {
+                        border: 2px solid white;
+                        background: transparent;
+                    }
+                    QCheckBox::indicator:checked {
+                        border: 2px solid white;
+                        background: gray;
+                    }
+                    QCheckBox {
+                        color: white;
+                        background: transparent;
+                        spacing: 6px;
+                        margin-bottom: 20px;
+                    }""")
+
+    def setStateProcessed(self, processed: bool) -> None:
+        """
+        Update the state label to indicate whether the cell has been processed.
+        Args:
+            processed: Boolean indicating if the cell has been processed.
+        """
+        if processed:
+            self.state_lbl.setText("✓")
+            self.state_lbl.setStyleSheet("color:yellow;")
+        else:
+            self.state_lbl.setText("✗")
+            self.state_lbl.setStyleSheet("color:red;")
+
+    def overlayCheckBox(self) -> QCheckBox:
+        """
+        Return the checkbox for overlaying the mask.
+        """
+        return self.mask_chk
+
+    # ---------- QLabel overrides ----------
+    def setPixmap(self, pixmap: QPixmap) -> None:
+        """
+        Store the original pixmap for scaling and set the pixmap.
+        Args:
+            pm: The QPixmap to display.
+        """
+        self._orig = pixmap
+        super().setPixmap(pixmap)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """
+        Handle the resize event to scale the pixmap and reposition overlays.
+        Args:
+            event: The resize event.
+        """
+        # 1) keep the pixmap aspect‑ratio
+        if self._orig:
+            super().setPixmap(self._orig.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation))
+
+        # 2) move overlays *inside* the label rect
+        rect = self.contentsRect()
+
+        # top‑right for state icon, 10 px inset
+        state_icon_size = self.state_lbl.sizeHint()
+        self.state_lbl.move(rect.right() - state_icon_size.width() - 10,
+                            rect.top() + 10)
+
+        #   bottom‑centre for checkbox, 10 px up
+        checkbox_size = self.mask_chk.sizeHint()
+        self.mask_chk.move(rect.center().x() - checkbox_size.width()//2,
+                           rect.bottom() - checkbox_size.height() - 10)
+
+        super().resizeEvent(event)
+
+    # give the layout a sane default
+    def sizeHint(self):
+        """
+        Return the size hint of the label.
+        """
+        if self._orig is not None:
+            return self._orig.size()
+        return self._default
+
+    def minimumSizeHint(self) -> QSize:
+        """
+        Allow the label to be resized to a minimum size.
+        """
+        return QSize(500, 500)
 
 
 class TopBarWidget(QWidget):
@@ -121,6 +239,7 @@ class ContentAreaWidget(QWidget):
         self.cell_slider_area.addWidget(self.cell_slider)
         self.layout.addLayout(self.cell_slider_area)
 
+    # TODO: Remove both slider from the ContentArea
     def _init_image_display(self) -> None:
         """
         Sets up the image display area including an overlay indicator. The image and state indicator are placed in a grid layout to allow overlap.
@@ -131,7 +250,7 @@ class ContentAreaWidget(QWidget):
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setSpacing(0)
 
-        self.image_label = AspectRatioPixmapLabel()
+        self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         grid_layout.addWidget(self.image_label, 0, 0)
@@ -166,7 +285,7 @@ class ContentAreaWidget(QWidget):
                     }
                     QCheckBox::indicator:checked {
                         border: 2px solid white;
-                        background: gray;
+                        background: rgba(255, 255, 0, 0.5);
                     }
                     QCheckBox {
                         color: white;
@@ -343,7 +462,7 @@ class CellViewManager(QMainWindow):
     def __init__(self, n_frames: int) -> None:
         super().__init__()
         self.setWindowTitle("Cell Image View")
-        self.resize(1200, 800)
+        self.resize(1000, 1000)
 
         # Initialize central widget and main layout.
         self.main_widget = QWidget()
@@ -455,13 +574,14 @@ class AspectRatioPixmapLabel(QLabel):
                     self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         super().resizeEvent(event)
 
- 
+
+
 # Constants for figure size and DPI
-FIG_SIZE = (5, 5)  # inches
+FIG_SIZE = (10, 10)  # inches
 DPI = 100  # dots per inch
 
 # Define the custom colormap: 
-CURRENT_COLOR = 'green'
+CURRENT_COLOR = 'white'
 # maps low intensities to black and high to current color.
 CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                          'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
@@ -471,7 +591,10 @@ CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                        'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]},
                'blue': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                         'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
-                        'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
+                        'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]},
+               'white': {'red': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
+                         'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
+                         'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
 class CellImageController:
     def __init__(self, data_loader: DataLoader, view: CellViewManager) -> None:
@@ -607,7 +730,7 @@ class CellImageController:
         dilated_mask = np.where(dilated_mask_bool, 50, 0).astype(np.uint8)
         
         # For a binary mask, a threshold of 1 is appropriate to delineate edges.
-        ax.contour(dilated_mask, levels=[1], colors='gray', linewidths=2)
+        ax.contour(dilated_mask, levels=[1], colors=[(1,1,0,0.5)], linewidths=2)
     
     def _draw_canvas_and_set_image(self, fig: Figure) -> None:
         """
