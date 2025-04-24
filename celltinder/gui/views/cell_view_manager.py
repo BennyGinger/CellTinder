@@ -1,7 +1,10 @@
-from typing import Iterable
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy, QGridLayout
+from __future__ import annotations
+from enum import Enum
+from typing import Callable, Iterable
+
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy, QGridLayout, QMessageBox
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QPixmap, QImage
+from PyQt6.QtGui import QPixmap, QImage, QIcon
 from PyQt6.QtGui import QShortcut, QKeySequence
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.axes import Axes
@@ -12,6 +15,31 @@ import numpy as np
 
 from celltinder.backend.data_loader import DataLoader
 
+
+class Shortcuts(Enum):
+    NEXT_CELL      = ("6", "Move to next cell",     "on_next_cell")
+    PREVIOUS_CELL  = ("4", "Move to previous cell", "on_previous_cell")
+    KEEP_CELL      = ("s", "Keep cell",             "on_keep_cell")
+    REJECT_CELL    = ("r", "Reject cell",           "on_reject_cell")
+    TOGGLE_OVERLAY = ("m", "Toggle overlay mask",   "_toggle_overlay")
+    NEXT_FRAME     = ("8", "Advance frame",         "_bump_frame")
+
+    def __init__(self, key: str, desc: str, method_name: str):
+        self._key = key
+        self._desc = desc
+        self._method = method_name
+    
+    @property
+    def key(self) -> str:
+        return self._key
+
+    @property
+    def desc(self) -> str:
+        return self._desc
+
+    @property
+    def method(self) -> str:
+        return self._method
 
 class BaseToolBar(QWidget):
     """HBox toolbar whose buttons & signals are declared in a list."""
@@ -53,6 +81,7 @@ class BaseToolBar(QWidget):
 
 class TopBar(BaseToolBar):
     backClicked = pyqtSignal()
+    helpClicked = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__([("Back to histo gui", "back")], parent)
@@ -63,6 +92,14 @@ class TopBar(BaseToolBar):
         
         self.back.clicked.disconnect()          # disconnect generic emit
         self.back.clicked.connect(self.backClicked.emit)
+        
+        help_btn = QPushButton(self)
+        help_btn.setIcon(QIcon.fromTheme("help-about"))    # or a local “?” pixmap
+        help_btn.setToolTip("Show keyboard shortcuts")
+        help_btn.setFlat(True)
+        help_btn.clicked.connect(self.helpClicked.emit)
+        self._box.addStretch()      # push it to the far right
+        self._box.addWidget(help_btn)
 
 
 class BottomBar(BaseToolBar):
@@ -81,7 +118,7 @@ class BottomBar(BaseToolBar):
             ("Process",  "processCells")
         ], parent)
 
-INDICATOR_STYLE = ("background:rgba(0,0,0,0);font-size:48px;color:{color};")
+
 class ContentAreaWidget(QWidget):
     """
     Content area of the Cell Image View, containing the cell image, sliders, and info panel.
@@ -90,6 +127,8 @@ class ContentAreaWidget(QWidget):
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
     
+    INDICATOR_STYLE = ("background:rgba(0,0,0,0);font-size:48px;color:{color};")
+
     def __init__(self, n_frames: int, parent=None):
         super().__init__(parent)
         self.n_frames = n_frames
@@ -113,6 +152,23 @@ class ContentAreaWidget(QWidget):
         # --- Frame Slider Area ---
         self._init_frame_slider_area()
 
+    def _make_slider(self, maximum: int, *, ticks: bool=False) -> QSlider:
+        """
+        Creates a horizontal slider with the specified maximum value.
+        Args:
+            maximum (int): The maximum value for the slider.
+        Returns:
+            QSlider: The created slider.
+        """
+        s = QSlider(Qt.Orientation.Horizontal)
+        s.setMinimum(1)
+        s.setMaximum(maximum)
+        s.setValue(1)
+        if ticks:
+            s.setTickPosition(QSlider.TickPosition.TicksBelow)
+            s.setTickInterval(1)
+        return s
+    
     def _init_info_panel(self) -> None:
         """
         Builds the info panel to show cell number, ratio, and a selected cells counter.
@@ -121,9 +177,17 @@ class ContentAreaWidget(QWidget):
         info_layout = QHBoxLayout(self.info_widget)
         info_layout.setContentsMargins(0, 0, 0, 0)
         
+        # Create a label for the cell info.
         self.cell_info_label = QLabel("Cell ?/?")
         self.cell_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
+        # Create labels for before and after cell info.
+        self.before_label = QLabel("Before: ?")
+        self.before_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.after_label  = QLabel("After:  ?")
+        self.after_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Create a label for the cell ratio.
         self.cell_ratio_label = QLabel("Ratio: ?")
         self.cell_ratio_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -139,6 +203,10 @@ class ContentAreaWidget(QWidget):
         info_layout.addStretch()
         info_layout.addWidget(self.cell_info_label)
         info_layout.addSpacing(50)
+        info_layout.addWidget(self.before_label)
+        info_layout.addSpacing(50)
+        info_layout.addWidget(self.after_label)
+        info_layout.addSpacing(50)
         info_layout.addWidget(self.cell_ratio_label)
         info_layout.addSpacing(50)
         info_layout.addLayout(selected_layout)
@@ -151,10 +219,7 @@ class ContentAreaWidget(QWidget):
         Creates a horizontal slider for selecting cells.
         """
         self.cell_slider_area = QVBoxLayout()
-        self.cell_slider = QSlider(Qt.Orientation.Horizontal)
-        self.cell_slider.setMinimum(1)
-        self.cell_slider.setMaximum(self.total_cells)
-        self.cell_slider.setValue(1)
+        self.cell_slider = self._make_slider(self.total_cells, ticks=False)
         self.cell_slider.valueChanged.connect(self._on_cell_slider_value_changed)
         # Emit a signal when the slider is released.
         self.cell_slider.sliderReleased.connect(lambda: self.cellSliderChanged.emit(self.cell_slider.value()))
@@ -178,7 +243,7 @@ class ContentAreaWidget(QWidget):
         grid_layout.addWidget(self.image_label, 0, 0)
         
         self.state_indicator_label = QLabel("✗")
-        self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="red"))
+        self.state_indicator_label.setStyleSheet(self.INDICATOR_STYLE.format(color="red"))
         self.state_indicator_label.setContentsMargins(0, 10, 20, 0)
         grid_layout.addWidget(self.state_indicator_label, 0, 0, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
@@ -225,12 +290,7 @@ class ContentAreaWidget(QWidget):
         self.slider_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.slider_area_layout.addWidget(self.slider_title)
         
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setMinimum(1)
-        self.slider.setMaximum(self.n_frames)
-        self.slider.setValue(1)
-        self.slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.slider.setTickInterval(1)
+        self.slider = self._make_slider(self.n_frames, ticks=True)
         self.slider.valueChanged.connect(lambda val: self.frameChanged.emit(val))
         self.slider_area_layout.addWidget(self.slider)
         
@@ -254,48 +314,36 @@ class ContentAreaWidget(QWidget):
         """
         self.cell_info_label.setText(f"Cell {value}/{self.total_cells}")
 
-    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
+    def update_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int, before: float, after: float, *, preview: bool = False) -> None:
         """
-        Updates the cell info panel with the current cell number, total cells, ratio, and processed state.
+        Updates the cell info displayed in the content area.
         Args:
             cell_number: Current cell number.
             total_cells: Total number of cells.
             cell_ratio: Ratio of the current cell.
             processed: Indicates if the cell has been processed.
             selected_count: Number of selected cells.
+            before: Ratio before stimulation.
+            after: Ratio after stimulation.
+            preview: If True, updates only the info panel without moving the slider.
         """
         self.total_cells = total_cells
         self.cell_info_label.setText(f"Cell {cell_number+1}/{total_cells}")
+        self.before_label.setText(f"Before: {before:.2f}")
+        self.after_label .setText(f"After:  {after:.2f}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
-        self.cell_slider.setMaximum(total_cells)
-        self.cell_slider.setValue(cell_number+1)
         self.selected_cells_value_label.setText(str(selected_count))
-        if processed:
-            self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="yellow"))
-        else:
-            self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="red"))
 
-    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
-        """
-        Updates the info panel with a preview of the cell information. This is used to show the information without changing the slider value.
-        Args:
-            cell_number: Current cell number.
-            total_cells: Total number of cells.
-            cell_ratio: Ratio of the current cell.
-            processed: Indicates if the cell has been processed.
-            selected_count: Number of selected cells.
-        """
-        self.cell_info_label.setText(f"Cell {cell_number+1}/{total_cells}")
-        self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
-        self.selected_cells_value_label.setText(str(selected_count))
-        if processed:
-            self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="yellow"))
-        else:
-            self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="red"))
+        self.state_indicator_label.setText("✓" if processed else "✗")
+        color = "yellow" if processed else "red"
+        self.state_indicator_label.setStyleSheet(self.INDICATOR_STYLE.format(color=color))
+
+        if not preview:
+            # only move the slider on “real” updates
+            self.cell_slider.blockSignals(True)
+            self.cell_slider.setMaximum(total_cells)
+            self.cell_slider.setValue(cell_number+1)
+            self.cell_slider.blockSignals(False)
 
     def setImage(self, pixmap: QPixmap) -> None:
         """
@@ -347,31 +395,6 @@ class CellImageView(QMainWindow):
         self.content_area.frameChanged.connect(self.frameChanged.emit)
         self.content_area.overlayToggled.connect(self.overlayToggled.emit)
         
-    
-    def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
-        """
-        Updates the cell info displayed in the content area.
-        Args:
-            cell_number: Current cell number.
-            total_cells: Total number of cells.
-            cell_ratio: Ratio of the current cell.
-            processed: Indicates if the cell has been processed.
-            selected_count: Number of selected cells.
-        """
-        self.content_area.set_cell_info(cell_number, total_cells, cell_ratio, processed, selected_count)
-    
-    def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
-        """
-        Updates the info preview displayed in the content area.
-        Args:
-            cell_number: Current cell number.
-            total_cells: Total number of cells.
-            cell_ratio: Ratio of the current cell.
-            processed: Indicates if the cell has been processed.
-            selected_count: Number of selected cells.
-        """
-        self.content_area.update_info_preview(cell_number, total_cells, cell_ratio, processed, selected_count)
-    
     def setImage(self, pixmap: QPixmap) -> None:
         """
         Sets the image in the content area.
@@ -417,48 +440,62 @@ class CellImageController:
         # Starting index for the positive cells
         self.current_idx = 0
         self.current_frame = 1          
-
+        
         # Setup view and connect signals...
         self.view = view
         self.view.total_cells = len(self.df)
         self.view.previousCellClicked.connect(self.on_previous_cell)
         self.view.skipCellClicked.connect(self.on_reject_cell)
         self.view.keepCellClicked.connect(self.on_keep_cell)
-        self.view.nextCellClicked.connect(self._move_to_next_cell)
+        self.view.nextCellClicked.connect(self.on_next_cell)
         self.view.processCellsClicked.connect(self.on_process_cells)
         self.view.frameChanged.connect(self.on_frame_changed)
         self.view.overlayToggled.connect(self.on_overlay_toggled)
         self.view.cellSliderChanged.connect(self.on_cell_slider_changed)
         self.view.cell_slider.valueChanged.connect(self.on_cell_slider_value_preview)
-
-        # Set the initial size of the view.
-        self.view.adjustSize()
         
         # Create the shortcuts
         self._init_shortcuts()
-
+        self.view.top_bar.helpClicked.connect(self._sc_manager.show_shortcuts)
+        
+        # Set the initial size of the view.
+        self.view.adjustSize()
+        
         # Load the first cell using its index from the df.
         self._load_cell()
 
     def _init_shortcuts(self) -> None:
-        self._shortcuts: list[QShortcut] = []
-
-        def bind(key: str, slot: callable) -> None:
-            """
-            Create a shortcut for a key and bind it to a slot.
-            """
-            sc = QShortcut(QKeySequence(key), self.view)
-            sc.setContext(Qt.ShortcutContext.WindowShortcut)
-            sc.activated.connect(slot)
-            self._shortcuts.append(sc)
-
-        bind("8", self._bump_frame)
-        bind("6", self._move_to_next_cell)
-        bind("4", self.on_previous_cell)
-        bind("s", self.on_keep_cell)
-        bind("r", self.on_reject_cell)
-        bind("m", self._toggle_overlay)
+        self._sc_manager = ShortcutManager(self)
     
+    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int]:
+        """
+        Gather information about the current cell.
+        """
+        if idx is None:
+            idx = self.current_idx
+        ratio = self.df['ratio'].iat[idx]
+        processed = self.df['process'].iat[idx]
+        selected_count = int(self.df['process'].sum())
+        before = self.df['before_stim'].iat[idx]
+        after = self.df['after_stim'].iat[idx]
+        return ratio, processed, selected_count, before, after
+
+    def _refresh_info(self, *, preview: bool = False) -> None:
+        """
+        Refresh the information displayed in the view.
+        Args:
+            preview (bool): If True, updates the info without moving the slider.
+        """
+        ratio, processed, selected_count, before, after = self._gather_info()
+        self.view.content_area.update_info(self.current_idx, self.total_cells, ratio, processed, selected_count, before, after, preview=preview)
+    
+    def _mark_cell(self, keep: bool) -> None:
+        """
+        Mark or unmark the current cell, then refresh the icon/text.
+        """
+        self.df.iat[self.current_idx, self.df.columns.get_loc('process')] = keep
+        self._refresh_info(preview=False)
+
     def _load_cell(self) -> None:
         """
         Load the current cell based on the current index.
@@ -473,12 +510,7 @@ class CellImageController:
         """
         Update the view with the current cell information.
         """
-        cell_ratio = self.df['ratio'].iloc[self.current_idx]
-        # Read the cell's state from the DataFrame (True if kept, False if rejected).
-        processed = self.df['process'].iloc[self.current_idx]
-        # Compute the total number of kept cells (assuming the DataFrame column 'process' holds booleans).
-        selected_count = int(self.df['process'].sum())
-        self.view.set_cell_info(self.current_idx, self.total_cells, cell_ratio, processed, selected_count)
+        self._refresh_info(preview=False)
         self._update_image()
 
     def _update_image(self) -> None:
@@ -502,28 +534,7 @@ class CellImageController:
             self._overlay_mask(ax, mask)
         
         # Render the figure to a canvas.
-        canvas = FigureCanvas(fig)
-        canvas.draw()
-        width, height = canvas.get_width_height()
-        # Retrieve the RGBA buffer from the canvas.
-        img_buffer = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8).reshape(height, width, 4)
-        
-        # Create a QImage from the RGBA buffer.
-        qimage = QImage(img_buffer.data, width, height, QImage.Format.Format_RGBA8888)
-        # Convert QImage to QPixmap
-        pixmap = QPixmap.fromImage(qimage)
-        self.view.setImage(pixmap)
-    
-    def _refresh_state_icon(self):
-        """
-        Update only the indicator + counters, no image reload.
-        """
-        ratio          = self.df['ratio'].iloc[self.current_idx]
-        processed      = self.df['process'].iloc[self.current_idx]
-        selected_count = int(self.df['process'].sum())
-
-        # False ⇒ preview-only update, so sliders are not jumped
-        self.view.update_info_preview(self.current_idx, self.total_cells, ratio, processed, selected_count)
+        self._draw_canvas_and_set_image(fig)
     
     def _get_image_and_mask(self) -> tuple[np.ndarray, np.ndarray | None]:
         """
@@ -593,14 +604,11 @@ class CellImageController:
         # Set the image in the view.
         self.view.setImage(pixmap)
     
-    def _move_to_next_cell(self) -> None:
+    def _step_cell(self, delta: int) -> None:
         """
-        Move to the next cell in the DataFrame. If at the end, loop back to the start.
+        Move forward or back (with wrap) and reload.
         """
-        if self.current_idx < len(self.df) - 1:
-            self.current_idx += 1
-        else:
-            self.current_idx = 0
+        self.current_idx = (self.current_idx + delta) % len(self.df)
         self._load_cell()
     
     def _bump_frame(self) -> None:
@@ -636,27 +644,29 @@ class CellImageController:
     
     def on_previous_cell(self) -> None:
         """
-        Handle the event when the previous cell button is clicked. If the current index is greater than 0, decrement the index and load the previous cell.
+        Move to the previous cell in the DataFrame. If at the start, loop back to the end.
         """
-        if self.current_idx > 0:
-            self.current_idx -= 1
-            self._load_cell()
+        self._step_cell(-1)
 
     def on_reject_cell(self) -> None:
         """
-        Handle the event when the skip cell button is clicked. Mark the current cell as rejected and move to the next cell."""
+        Mark the current cell as rejected. This will set the process flag to False and refresh the view.
+        """
         # Mark current cell as rejected by setting the process flag to False.
-        self.df.iloc[self.current_idx, self.df.columns.get_loc('process')] = False
-        self._refresh_state_icon()
+        self._mark_cell(False)
 
     def on_keep_cell(self) -> None:
         """
-        Handle the event when the keep cell button is clicked. Mark the current cell for processing. Then move to the next cell.
+        Mark the current cell as kept. This will set the process flag to True and refresh the view.
         """
-        # Mark current cell for processing.
-        self.df.iloc[self.current_idx, self.df.columns.get_loc('process')] = True
-        self._refresh_state_icon()
+        self._mark_cell(True)
 
+    def on_next_cell(self) -> None:
+        """
+        Move to the next cell in the DataFrame. If at the end, loop back to the start.
+        """
+        self._step_cell(+1)
+    
     def on_cell_slider_changed(self, cell_number: int) -> None:
         """
         Called when the user releases the cell slider. Update the current index and load that cell.
@@ -669,13 +679,8 @@ class CellImageController:
         Update the info panel and icon based on slider movement.
         (This is a preview update and should not trigger a full image reload.)
         """
-        index = value - 1  # Convert the slider value to 0-indexed.
-        # Retrieve the preview data from your DataFrame.
-        ratio = self.df['ratio'].iloc[index]
-        processed = self.df['process'].iloc[index]
-        selected_count = int(self.df['process'].sum())
-        # Update the info panel (and overlay indicator) without loading a new image.
-        self.view.update_info_preview(index, self.total_cells, ratio, processed, selected_count)
+        self.current_idx = value - 1
+        self._refresh_info(preview=True)
 
     def on_process_cells(self) -> None:
         """
@@ -696,3 +701,28 @@ class CellImageController:
         return len(self.df) 
 
 
+class ShortcutManager:
+    """
+    Centralize all shortcut bindings (from Shortcuts enum)
+    and show a help dialog.
+    """
+    def __init__(self, controller: CellImageController) -> None:
+        self._shortcuts: list[QShortcut] = []
+        self._ctrl = controller
+
+        def bind(key: str, slot: Callable) -> None:
+            sc = QShortcut(QKeySequence(key), controller.view)
+            sc.setContext(Qt.ShortcutContext.WindowShortcut)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
+
+        # bind each enum entry to the matching controller method
+        for sc in Shortcuts:
+            bind(sc.key, getattr(controller, sc.method))
+
+    def show_shortcuts(self):
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self._ctrl.view)
+        msg.setWindowTitle("Keyboard Shortcuts")
+        msg.setText("\n".join(f"{sc.key} : {sc.desc}" for sc in Shortcuts))
+        msg.exec()
