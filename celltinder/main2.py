@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
 from celltinder.backend.data_loader import DataLoader
 from celltinder.gui.views.histo_view import HistogramView, HistogramController
-from celltinder.gui.views.cell_view_manager import CellViewManager, CellImageController
+from celltinder.gui.views.cell_view_manager import CellImageView, CellImageController
 
 class MainApp(QMainWindow):
     """
@@ -47,7 +47,7 @@ class MainApp(QMainWindow):
         n_frames = len(first_cell.imgs)
 
         # Create and initialize cell view and controller
-        self.cell_view = CellViewManager(n_frames)
+        self.cell_view = CellImageView(n_frames)
         self.cell_ctrl = CellImageController(self.data_loader, self.cell_view)
 
         # Connect back button to return to histogram

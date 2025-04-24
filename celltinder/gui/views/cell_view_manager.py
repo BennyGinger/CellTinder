@@ -16,7 +16,6 @@ from celltinder.gui.views.cell_image_view.content_area_view import ContentAreaWi
 
 from PyQt6.QtWidgets import QLabel, QCheckBox
 from PyQt6.QtCore    import Qt, QSize
-from PyQt6.QtGui     import QFont
 
 class ImageWithOverlays(QLabel):
     """
@@ -157,6 +156,8 @@ class TopBarWidget(QWidget):
 
 
 FONT_SIZE = 48
+INDICATOR_STYLE_RED = "background: rgba(0,0,0,0); font-size: 48px; color: red;"
+INDICATOR_STYLE_YELLOW = "background: rgba(0,0,0,0); font-size: 48px; color: yellow;"
 class ContentAreaWidget(QWidget):
     """
     Content area of the Cell Image View, containing the cell image, sliders, and info panel.
@@ -256,7 +257,7 @@ class ContentAreaWidget(QWidget):
         grid_layout.addWidget(self.image_label, 0, 0)
         
         self.state_indicator_label = QLabel("✗")
-        self.state_indicator_label.setStyleSheet(f"background: rgba(0,0,0,0); font-size: {FONT_SIZE}px; color: red;")
+        self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_RED)
         self.state_indicator_label.setContentsMargins(0, 10, 20, 0)
         grid_layout.addWidget(self.state_indicator_label, 0, 0, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
@@ -350,10 +351,10 @@ class ContentAreaWidget(QWidget):
         self.selected_cells_value_label.setText(str(selected_count))
         if processed:
             self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(f"background: rgba(0,0,0,0); font-size: {FONT_SIZE}px; color: yellow;")
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_YELLOW)
         else:
             self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(f"background: rgba(0,0,0,0); font-size: {FONT_SIZE}px; color: red;")
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_RED)
 
     def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
         """
@@ -370,10 +371,10 @@ class ContentAreaWidget(QWidget):
         self.selected_cells_value_label.setText(str(selected_count))
         if processed:
             self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: green;")
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_YELLOW)
         else:
             self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet("background: rgba(0,0,0,0); font-size: 24px; color: red;")
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_RED)
 
     def setImage(self, pixmap: QPixmap) -> None:
         """
@@ -448,7 +449,7 @@ class BottomBarWidget(QWidget):
         # Connect the button to the signal.
         self.process_cells_btn.clicked.connect(self.processCellsClicked.emit)
 
-class CellViewManager(QMainWindow):
+class CellImageView(QMainWindow):
     # Define signals to propagate actions from the subwidgets.
     backClicked = pyqtSignal()
     previousCellClicked = pyqtSignal()
@@ -575,7 +576,6 @@ class AspectRatioPixmapLabel(QLabel):
         super().resizeEvent(event)
 
 
-
 # Constants for figure size and DPI
 FIG_SIZE = (10, 10)  # inches
 DPI = 100  # dots per inch
@@ -597,7 +597,7 @@ CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                          'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
 class CellImageController:
-    def __init__(self, data_loader: DataLoader, view: CellViewManager) -> None:
+    def __init__(self, data_loader: DataLoader, view: CellImageView) -> None:
         
         self.data = data_loader
         self.data.add_process_col()
