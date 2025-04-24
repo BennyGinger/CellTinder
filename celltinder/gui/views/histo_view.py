@@ -4,8 +4,59 @@ from PyQt6.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
+
 
 from celltinder.backend.data_loader import DataLoader
+
+
+class DraggableLine:
+    """
+    Makes a matplotlib vertical Line2D artist draggable along the x-axis. Calls `callback(new_x)` whenever dragging moves the line.
+    """
+    def __init__(self, line, callback):
+        self.line = line
+        self.callback = callback
+        self.press = None
+        canvas = line.figure.canvas
+        canvas.mpl_connect('button_press_event', self.on_press)
+        canvas.mpl_connect('button_release_event', self.on_release)
+        canvas.mpl_connect('motion_notify_event', self.on_motion)
+
+    def on_press(self, event):
+        # ignore clicks outside the axes
+        if event.inaxes != self.line.axes:
+            return
+        # guard against a Line2D without a figure
+        try:
+            contains, _ = self.line.contains(event)
+        except Exception:
+            return
+        if not contains:
+            return
+        x0 = self.line.get_xdata()[0]
+        self.press = (x0, event.xdata)
+
+    def on_motion(self, event):
+        # ignore if not dragging, outside axes, or no xdata
+        if (self.press is None or
+            event.inaxes != self.line.axes or
+            event.xdata is None):
+            return
+        x0, xpress = self.press
+        dx = event.xdata - xpress
+        newx = x0 + dx
+        self.line.set_xdata([newx, newx])
+        self.line.figure.canvas.draw_idle()
+        self.callback(newx)
+    
+    def on_release(self, event):
+        self.press = None
+    
+    def set_line(self, line):
+        # re-bind to the new Line2D instance
+        self.line = line
+
 
 class GraphWidget(QWidget):
     """
@@ -13,10 +64,25 @@ class GraphWidget(QWidget):
     """
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.figure = Figure(figsize=(6, 4))
+        self.figure = Figure(figsize=(10, 6))
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumSize(1000, 800)
         self.toolbar = NavigationToolbar(self.canvas, self)
-
+        
+        # Create a span selector for selecting ranges and connecting it to the canvas
+        self._span_start = None
+        self._span_rect = None
+        self.canvas.mpl_connect('button_press_event', self._on_span_press)
+        self.canvas.mpl_connect('motion_notify_event', self._on_span_motion)
+        self.canvas.mpl_connect('button_release_event', self._on_span_release)
+        
+        # Callbacks for the draggable lines
+        self.draggable_lower = None
+        self.draggable_upper = None
+        self.on_lower_moved = None
+        self.on_upper_moved = None
+        
+        # Set up the layout
         layout = QVBoxLayout(self)
         layout.addWidget(self.canvas)
 
@@ -33,15 +99,77 @@ class GraphWidget(QWidget):
         """
         self.figure.clear()
         ax = self.figure.add_subplot(111)
+        self.ax = ax
         ax.hist(ratios, bins=50, color='blue', alpha=0.7)
-        ax.axvline(x=lower_val, color='red', linestyle='--', label='Lower Threshold')
-        ax.axvline(x=upper_val, color='green', linestyle='--', label='Upper Threshold')
+        
+        # Draw the threshold lines
+        self.lower_line = ax.axvline(x=lower_val, color='red', linestyle='--', label='Lower Threshold')
+        self.upper_line = ax.axvline(x=upper_val, color='green', linestyle='--', label='Upper Threshold')
+        
+        if self.draggable_lower is None:
+            self.draggable_lower = DraggableLine(self.lower_line, lambda x: self.on_lower_moved(x) if self.on_lower_moved else None)
+            self.draggable_upper = DraggableLine(self.upper_line, lambda x: self.on_upper_moved(x) if self.on_upper_moved else None)
+        else:
+            self.draggable_lower.set_line(self.lower_line)
+            self.draggable_upper.set_line(self.upper_line)
+        
+        if self._span_rect is not None:
+            self._span_rect.set_visible(False)
+            self._span_rect = None
+        
         ax.set_xlabel("Ratio")
         ax.set_ylabel("Count")
         ax.set_title("Histogram of Ratio")
         ax.set_yscale('log', base=10)
         self.canvas.draw()
 
+    def _on_span_press(self, event) -> None:
+        """
+        Start the span selection on right-click in the axes.
+        """
+        if event.inaxes is not self.ax or event.button != 3 or event.xdata is None:
+            return
+        self._span_start = event.xdata
+        
+        # make a new rectangle at y=axes bottom
+        ymin, ymax = self.ax.get_ylim()
+        self._span_rect = Rectangle((self._span_start, ymin), 0, ymax - ymin, facecolor='yellow', alpha=0.3, edgecolor=None)
+        self.ax.add_patch(self._span_rect)
+        self.canvas.draw_idle()
+
+    def _on_span_motion(self, event) -> None:
+        """
+        Update the rectangle during the drag.
+        """
+        if self._span_start is None or event.inaxes is not self.ax or event.xdata is None:
+            return
+        start = self._span_start
+        end = event.xdata
+        
+        # update rect x & width
+        x0 = min(start, end)
+        w = abs(end - start)
+        self._span_rect.set_x(x0)
+        self._span_rect.set_width(w)
+        self.canvas.draw_idle()
+
+    def _on_span_release(self, event) -> None:
+        """
+        Finish the span selection on right-release in the same axes.
+        """
+        if self._span_start is None or event.inaxes is not self.ax or event.button != 3 or event.xdata is None:
+            return
+        start = self._span_start
+        end = event.xdata
+        low, high = sorted((start, end))
+        
+        # fire your controller
+        if self.on_span_select:
+            self.on_span_select(low, high)
+        # clean up
+        self._span_start = None
+        
+        
 class ControlsWidget(QWidget):
     """
     Widget that contains the threshold input controls and cell count display.
@@ -50,25 +178,9 @@ class ControlsWidget(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
 
-        # Lower Threshold Input
-        lower_layout = QVBoxLayout()
-        self.lower_label = QLabel("Lower Threshold")
-        self.lower_edit = QLineEdit()
-        self.lower_edit.setFixedWidth(120)
-        self.lower_edit.setStyleSheet("color: red;")
-        self.lower_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
-        lower_layout.addWidget(self.lower_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        lower_layout.addWidget(self.lower_edit, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Upper Threshold Input
-        upper_layout = QVBoxLayout()
-        self.upper_label = QLabel("Upper Threshold")
-        self.upper_edit = QLineEdit()
-        self.upper_edit.setFixedWidth(120)
-        self.upper_edit.setStyleSheet("color: green;")
-        self.upper_edit.setValidator(QDoubleValidator(0.0, 1000.0, 2))
-        upper_layout.addWidget(self.upper_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        upper_layout.addWidget(self.upper_edit, alignment=Qt.AlignmentFlag.AlignCenter)
+        # Lower and Upper Threshold Inputs
+        self.lower_label, self.lower_edit, lower_layout = self._create_threshold_input("Lower Threshold", "red")
+        self.upper_label, self.upper_edit, upper_layout = self._create_threshold_input("Upper Threshold", "green")
 
         # Cell Count Display
         count_layout = QVBoxLayout()
@@ -85,6 +197,20 @@ class ControlsWidget(QWidget):
         layout.addLayout(upper_layout)
         layout.addLayout(count_layout)
 
+    def _create_threshold_input(self, text: str, color: str):
+        """
+        Helper to build one threshold input (label + line-edit) and return (label, edit, layout).
+        """
+        sub = QVBoxLayout()
+        lbl = QLabel(text)
+        edt = QLineEdit()
+        edt.setFixedWidth(120)
+        edt.setStyleSheet(f"color: {color};")
+        edt.setValidator(QDoubleValidator(0.0, 1000.0, 2))
+        sub.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        sub.addWidget(edt, alignment=Qt.AlignmentFlag.AlignCenter)
+        return lbl, edt, sub
+    
     def update_count(self, count: int) -> None:
         """
         Update the cell count display.
@@ -132,7 +258,7 @@ class HistogramView(QMainWindow):
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
-        self.resize(500, 500)
+        self.resize(1500, 1000)
 
         # Create and add the graph area (graph and toolbar)
         self.graph_widget = GraphWidget()
@@ -208,7 +334,14 @@ class HistogramController:
         
         # Draw the initial plot
         self.view.update_plot(displayed_lower, displayed_upper, self.model.ratios)
-    
+
+        # hook up the two drag callbacks:
+        self.view.graph_widget.on_lower_moved = self.on_lower_moved
+        self.view.graph_widget.on_upper_moved = self.on_upper_moved
+        
+        # hook up the span selector callback
+        self.view.graph_widget.on_span_select = self._on_span_selected
+
     def on_threshold_change(self) -> None:
         """
         Update the cell count and plot when the threshold values change.
@@ -234,12 +367,30 @@ class HistogramController:
         if threshold_cols:
             # If found, drop them to ensure only one threshold column exists
             self.model.df.drop(columns=threshold_cols, inplace=True)
-            print(f"Overwriting existing threshold columns {threshold_cols} with new column '{column_name}'.")
-        else:
-            print(f"New column '{column_name}' added to the DataFrame.")
             
         # Add a new column to the DataFrame based on the threshold values
         self.model.df[column_name] = self.model.df['ratio'].apply(lambda x: lower_val < x < upper_val)
         self.model.update_thresholds(lower_val, upper_val, column_name)
         self.model.save_csv()
 
+    def on_lower_moved(self, new_lower: float) -> None:
+        # enforce lower < upper
+        upper = float(self.view.upper_edit.text())
+        if new_lower >= upper:
+            new_lower = upper - 0.01
+        self.view.lower_edit.setText(f"{new_lower:.2f}")
+        self.on_threshold_change()
+
+    def on_upper_moved(self, new_upper: float) -> None:
+        lower = float(self.view.lower_edit.text())
+        if new_upper <= lower:
+            new_upper = lower + 0.01
+        self.view.upper_edit.setText(f"{new_upper:.2f}")
+        self.on_threshold_change()
+
+    def _on_span_selected(self, lower: float, upper: float) -> None:
+        # push values into the edits and redraw
+        self.view.lower_edit.setText(f"{lower:.2f}")
+        self.view.upper_edit.setText(f"{upper:.2f}")
+        self.on_threshold_change()
+    
