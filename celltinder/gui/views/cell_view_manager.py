@@ -1,6 +1,8 @@
+from typing import Iterable
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy, QGridLayout
-from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QPixmap, QImage, QResizeEvent
+from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtGui import QPixmap, QImage
+from PyQt6.QtGui import QShortcut, QKeySequence
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
@@ -9,155 +11,77 @@ from scipy.ndimage import binary_dilation
 import numpy as np
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.gui.views.cell_image_view.top_bar_view import TopBarWidget
-from celltinder.gui.views.cell_image_view.bottom_bar_view import BottomBarWidget
-from celltinder.gui.views.cell_image_view.content_area_view import ContentAreaWidget
 
 
-from PyQt6.QtWidgets import QLabel, QCheckBox
-from PyQt6.QtCore    import Qt, QSize
-
-class ImageWithOverlays(QLabel):
-    """
-    QLabel that:
-      • preserves pixmap aspect‑ratio when resized
-      • carries two overlay widgets that auto‑reposition
-    """
-    def __init__(self, parent=None):
+class BaseToolBar(QWidget):
+    """HBox toolbar whose buttons & signals are declared in a list."""
+    def __init__(self, buttons: Iterable[tuple[str, str]], parent=None):
+        """
+        buttons: iterable of (text, attr_name)  
+        An attr named *attr_name* is created to host the button **and** a
+        pyqtSignal with the same name + "Clicked".
+        """
         super().__init__(parent)
-        self._orig = None     
-        self._default = QSize(500, 500)
-        self.setScaledContents(False)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self._box = QHBoxLayout(self)
+        self._box.setContentsMargins(0, 0, 0, 0)
+        self._box.addStretch()
 
-        # --- overlay 1 : state icon ---
-        self.state_lbl = QLabel("✗", self)
-        self.state_lbl.setStyleSheet("background:transparent; font-size: {FONT_SIZE}px; color: red;")
+        for text, name in buttons:
+            self._add_button(text, name)
 
-        # --- overlay 2 : mask checkbox ---
-        self.mask_chk = QCheckBox("Overlay mask", self)
-        self.mask_chk.setStyleSheet("""
-                    QCheckBox::indicator {
-                        width: 15px;
-                        height: 15px;
-                        border-radius: 4px;
-                    }
-                    QCheckBox::indicator:unchecked {
-                        border: 2px solid white;
-                        background: transparent;
-                    }
-                    QCheckBox::indicator:checked {
-                        border: 2px solid white;
-                        background: gray;
-                    }
-                    QCheckBox {
-                        color: white;
-                        background: transparent;
-                        spacing: 6px;
-                        margin-bottom: 20px;
-                    }""")
-
-    def setStateProcessed(self, processed: bool) -> None:
+    def __getattr__(self, item) -> pyqtSignal:
         """
-        Update the state label to indicate whether the cell has been processed.
-        Args:
-            processed: Boolean indicating if the cell has been processed.
+        Create a signal when the attribute is accessed for the first time.
         """
-        if processed:
-            self.state_lbl.setText("✓")
-            self.state_lbl.setStyleSheet("color:yellow;")
-        else:
-            self.state_lbl.setText("✗")
-            self.state_lbl.setStyleSheet("color:red;")
+        if item.endswith("Clicked"):
+            self.__dict__[item] = pyqtSignal()
+            return self.__dict__[item]
+        raise AttributeError(item)
 
-    def overlayCheckBox(self) -> QCheckBox:
+    def _add_button(self, text: str, name: str) -> None:
         """
-        Return the checkbox for overlaying the mask.
+        Create a button with the given text and name, and connect it to the signal.
         """
-        return self.mask_chk
-
-    # ---------- QLabel overrides ----------
-    def setPixmap(self, pixmap: QPixmap) -> None:
-        """
-        Store the original pixmap for scaling and set the pixmap.
-        Args:
-            pm: The QPixmap to display.
-        """
-        self._orig = pixmap
-        super().setPixmap(pixmap)
-
-    def resizeEvent(self, event: QResizeEvent) -> None:
-        """
-        Handle the resize event to scale the pixmap and reposition overlays.
-        Args:
-            event: The resize event.
-        """
-        # 1) keep the pixmap aspect‑ratio
-        if self._orig:
-            super().setPixmap(self._orig.scaled(
-                self.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation))
-
-        # 2) move overlays *inside* the label rect
-        rect = self.contentsRect()
-
-        # top‑right for state icon, 10 px inset
-        state_icon_size = self.state_lbl.sizeHint()
-        self.state_lbl.move(rect.right() - state_icon_size.width() - 10,
-                            rect.top() + 10)
-
-        #   bottom‑centre for checkbox, 10 px up
-        checkbox_size = self.mask_chk.sizeHint()
-        self.mask_chk.move(rect.center().x() - checkbox_size.width()//2,
-                           rect.bottom() - checkbox_size.height() - 10)
-
-        super().resizeEvent(event)
-
-    # give the layout a sane default
-    def sizeHint(self):
-        """
-        Return the size hint of the label.
-        """
-        if self._orig is not None:
-            return self._orig.size()
-        return self._default
-
-    def minimumSizeHint(self) -> QSize:
-        """
-        Allow the label to be resized to a minimum size.
-        """
-        return QSize(500, 500)
+        btn = QPushButton(text, self)
+        btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        sig = getattr(self, f"{name}Clicked")
+        btn.clicked.connect(sig.emit)
+        setattr(self, name, btn)
+        self._box.addWidget(btn)
+        self._box.addStretch()
 
 
-class TopBarWidget(QWidget):
-    """Create the top bar area"""
+class TopBar(BaseToolBar):
     backClicked = pyqtSignal()
-    
+
     def __init__(self, parent=None):
-        super().__init__(parent)
-        # Create the top bar container (the "box") with an empty horizontal layout.
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.addStretch()
+        super().__init__([("Back to histo gui", "back")], parent)
         
-        # Add the back button to the top bar.
-        self._init_back_button()
-
-    def _init_back_button(self) -> None:
-        """
-        Initializes and adds a back button to the top bar. This method can be called from __init__.
-        """
-        self.back_btn = QPushButton("Back to histo gui")
-        self.back_btn.clicked.connect(self.backClicked.emit)
-        # Insert the back button at the beginning of the layout.
-        self.layout.insertWidget(0, self.back_btn)
+        # remove the first stretch so the button hugs the left edge
+        self._box.takeAt(0)
+        self._box.addStretch()
+        
+        self.back.clicked.disconnect()          # disconnect generic emit
+        self.back.clicked.connect(self.backClicked.emit)
 
 
-FONT_SIZE = 48
-INDICATOR_STYLE_RED = "background: rgba(0,0,0,0); font-size: 48px; color: red;"
-INDICATOR_STYLE_YELLOW = "background: rgba(0,0,0,0); font-size: 48px; color: yellow;"
+class BottomBar(BaseToolBar):
+    previousCellClicked = pyqtSignal()
+    skipCellClicked = pyqtSignal()
+    keepCellClicked = pyqtSignal()
+    nextCellClicked = pyqtSignal()
+    processCellsClicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__([
+            ("Previous", "previousCell"),
+            ("Reject",   "skipCell"),
+            ("Keep",     "keepCell"),
+            ("Next",     "nextCell"),
+            ("Process",  "processCells")
+        ], parent)
+
+INDICATOR_STYLE = ("background:rgba(0,0,0,0);font-size:48px;color:{color};")
 class ContentAreaWidget(QWidget):
     """
     Content area of the Cell Image View, containing the cell image, sliders, and info panel.
@@ -185,9 +109,6 @@ class ContentAreaWidget(QWidget):
         
         # --- Image Display Area ---
         self._init_image_display()
-        
-        # --- Overlay Checkbox ---
-        self._init_overlay_checkbox()
         
         # --- Frame Slider Area ---
         self._init_frame_slider_area()
@@ -257,7 +178,7 @@ class ContentAreaWidget(QWidget):
         grid_layout.addWidget(self.image_label, 0, 0)
         
         self.state_indicator_label = QLabel("✗")
-        self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_RED)
+        self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="red"))
         self.state_indicator_label.setContentsMargins(0, 10, 20, 0)
         grid_layout.addWidget(self.state_indicator_label, 0, 0, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         
@@ -351,10 +272,10 @@ class ContentAreaWidget(QWidget):
         self.selected_cells_value_label.setText(str(selected_count))
         if processed:
             self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_YELLOW)
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="yellow"))
         else:
             self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_RED)
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="red"))
 
     def update_info_preview(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
         """
@@ -371,10 +292,10 @@ class ContentAreaWidget(QWidget):
         self.selected_cells_value_label.setText(str(selected_count))
         if processed:
             self.state_indicator_label.setText("✓")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_YELLOW)
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="yellow"))
         else:
             self.state_indicator_label.setText("✗")
-            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE_RED)
+            self.state_indicator_label.setStyleSheet(INDICATOR_STYLE.format(color="red"))
 
     def setImage(self, pixmap: QPixmap) -> None:
         """
@@ -384,77 +305,13 @@ class ContentAreaWidget(QWidget):
         """
         self.image_label.setPixmap(pixmap)
 
-class BottomBarWidget(QWidget):
-    """Create the bottom bar area"""
-    previousCellClicked = pyqtSignal()
-    skipCellClicked = pyqtSignal()
-    keepCellClicked = pyqtSignal()
-    processCellsClicked = pyqtSignal()
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # Create the bottom bar container (the "box") with an empty horizontal layout.
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        # Optionally add an initial stretch.
-        self.layout.addStretch()
-        
-        # Add each button using dedicated methods.
-        self._init_prev_cell_button()
-        self._init_skip_cell_button()
-        self._init_keep_cell_button()
-        self._init_process_cells_button()
-
-    def _setup_button_layout(self, button: QPushButton) -> None:
-        """
-        Configures the button's size policy and adds it to the layout.
-        """
-        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.layout.addWidget(button)
-        self.layout.addStretch()
-    
-    def _init_prev_cell_button(self) -> None:
-        """
-        Initializes and adds the 'Previous cell' button.
-        """
-        self.prev_cell_btn = QPushButton("Previous cell")
-        self._setup_button_layout(self.prev_cell_btn)
-        # Connect the button to the signal.
-        self.prev_cell_btn.clicked.connect(self.previousCellClicked.emit)
-
-    def _init_skip_cell_button(self) -> None:
-        """
-        Initializes and adds the 'Reject cell' button.
-        """
-        self.skip_cell_btn = QPushButton("Reject cell")
-        self._setup_button_layout(self.skip_cell_btn)
-        # Connect the button to the signal.
-        self.skip_cell_btn.clicked.connect(self.skipCellClicked.emit)
-
-    def _init_keep_cell_button(self) -> None:
-        """
-        Initializes and adds the 'Keep cell' button.
-        """
-        self.keep_cell_btn = QPushButton("Keep cell")
-        self._setup_button_layout(self.keep_cell_btn)
-        # Connect the button to the signal.
-        self.keep_cell_btn.clicked.connect(self.keepCellClicked.emit)
-
-    def _init_process_cells_button(self) -> None:
-        """
-        Initializes and adds the 'Process cells' button.
-        """
-        self.process_cells_btn = QPushButton("Process cells")
-        self._setup_button_layout(self.process_cells_btn)
-        # Connect the button to the signal.
-        self.process_cells_btn.clicked.connect(self.processCellsClicked.emit)
-
 class CellImageView(QMainWindow):
     # Define signals to propagate actions from the subwidgets.
     backClicked = pyqtSignal()
     previousCellClicked = pyqtSignal()
     skipCellClicked = pyqtSignal()
     keepCellClicked = pyqtSignal()
+    nextCellClicked = pyqtSignal()
     processCellsClicked = pyqtSignal()
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
@@ -471,9 +328,9 @@ class CellImageView(QMainWindow):
         self.main_layout = QVBoxLayout(self.main_widget)
         
         # Create and inject subwidgets.
-        self.top_bar = TopBarWidget()
+        self.top_bar = TopBar()
         self.content_area = ContentAreaWidget(n_frames)
-        self.bottom_bar = BottomBarWidget()
+        self.bottom_bar = BottomBar()
         
         self.main_layout.addWidget(self.top_bar)
         self.main_layout.addWidget(self.content_area, stretch=1)
@@ -484,10 +341,12 @@ class CellImageView(QMainWindow):
         self.bottom_bar.previousCellClicked.connect(self.previousCellClicked.emit)
         self.bottom_bar.skipCellClicked.connect(self.skipCellClicked.emit)
         self.bottom_bar.keepCellClicked.connect(self.keepCellClicked.emit)
+        self.bottom_bar.nextCellClicked.connect(self.nextCellClicked.emit)
         self.bottom_bar.processCellsClicked.connect(self.processCellsClicked.emit)
         self.content_area.cellSliderChanged.connect(self.cellSliderChanged.emit)
         self.content_area.frameChanged.connect(self.frameChanged.emit)
         self.content_area.overlayToggled.connect(self.overlayToggled.emit)
+        
     
     def set_cell_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int) -> None:
         """
@@ -528,53 +387,6 @@ class CellImageView(QMainWindow):
         """
         return self.content_area.cell_slider
 
-class AspectRatioPixmapLabel(QLabel):
-    """
-    QLabel that remembers its original pixmap and rescales it
-    with Qt.KeepAspectRatio whenever the widget is resized.
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._orig_pixmap = None
-        self._default     = QSize(500, 500)
-        self.setScaledContents(False)     # we’ll do our own scaling
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-
-    def sizeHint(self) -> QSize:
-        """
-        Return the size hint of the label.
-        """
-        if self._orig_pixmap is not None:
-            return self._orig_pixmap.size()
-        return self._default                    # <‑‑ initial size
-
-    def minimumSizeHint(self) -> QSize:
-        """
-        Allow the label to be resized to a minimum size.
-        """
-        return QSize(500, 500)
-    
-    # store the *original* pixmap so we can re‑scale from the source each time
-    def setPixmap(self, pixmap) -> None:
-        """
-        Set the pixmap and store the original for scaling.
-        """
-        self._orig_pixmap = pixmap
-        super().setPixmap(pixmap)
-
-    # every time the label resizes, re‑scale with KeepAspectRatio
-    def resizeEvent(self, event) -> None:
-        """
-        Handle the resize event to scale the pixmap.
-        """
-        if self._orig_pixmap is not None:
-            if self._orig_pixmap:
-                super().setPixmap(self._orig_pixmap.scaled(
-                    self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        super().resizeEvent(event)
-
 
 # Constants for figure size and DPI
 FIG_SIZE = (10, 10)  # inches
@@ -612,6 +424,7 @@ class CellImageController:
         self.view.previousCellClicked.connect(self.on_previous_cell)
         self.view.skipCellClicked.connect(self.on_reject_cell)
         self.view.keepCellClicked.connect(self.on_keep_cell)
+        self.view.nextCellClicked.connect(self._move_to_next_cell)
         self.view.processCellsClicked.connect(self.on_process_cells)
         self.view.frameChanged.connect(self.on_frame_changed)
         self.view.overlayToggled.connect(self.on_overlay_toggled)
@@ -620,10 +433,32 @@ class CellImageController:
 
         # Set the initial size of the view.
         self.view.adjustSize()
+        
+        # Create the shortcuts
+        self._init_shortcuts()
 
         # Load the first cell using its index from the df.
         self._load_cell()
 
+    def _init_shortcuts(self) -> None:
+        self._shortcuts: list[QShortcut] = []
+
+        def bind(key: str, slot: callable) -> None:
+            """
+            Create a shortcut for a key and bind it to a slot.
+            """
+            sc = QShortcut(QKeySequence(key), self.view)
+            sc.setContext(Qt.ShortcutContext.WindowShortcut)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
+
+        bind("8", self._bump_frame)
+        bind("6", self._move_to_next_cell)
+        bind("4", self.on_previous_cell)
+        bind("s", self.on_keep_cell)
+        bind("r", self.on_reject_cell)
+        bind("m", self._toggle_overlay)
+    
     def _load_cell(self) -> None:
         """
         Load the current cell based on the current index.
@@ -678,6 +513,17 @@ class CellImageController:
         # Convert QImage to QPixmap
         pixmap = QPixmap.fromImage(qimage)
         self.view.setImage(pixmap)
+    
+    def _refresh_state_icon(self):
+        """
+        Update only the indicator + counters, no image reload.
+        """
+        ratio          = self.df['ratio'].iloc[self.current_idx]
+        processed      = self.df['process'].iloc[self.current_idx]
+        selected_count = int(self.df['process'].sum())
+
+        # False ⇒ preview-only update, so sliders are not jumped
+        self.view.update_info_preview(self.current_idx, self.total_cells, ratio, processed, selected_count)
     
     def _get_image_and_mask(self) -> tuple[np.ndarray, np.ndarray | None]:
         """
@@ -747,6 +593,33 @@ class CellImageController:
         # Set the image in the view.
         self.view.setImage(pixmap)
     
+    def _move_to_next_cell(self) -> None:
+        """
+        Move to the next cell in the DataFrame. If at the end, loop back to the start.
+        """
+        if self.current_idx < len(self.df) - 1:
+            self.current_idx += 1
+        else:
+            self.current_idx = 0
+        self._load_cell()
+    
+    def _bump_frame(self) -> None:
+        """
+        Increments the frame slider value by 1. If it exceeds the maximum, it wraps around to the minimum.
+        """
+        slider = self.view.content_area.slider
+        nxt = slider.value() + 1
+        if nxt > slider.maximum():
+            nxt = slider.minimum()
+        slider.setValue(nxt)
+    
+    def _toggle_overlay(self) -> None:
+        """
+        Toggles the overlay checkbox in the view.
+        """
+        self.view.content_area.overlay_checkbox.toggle()
+    
+    # --------- Event handlers for the view signals -----------------
     def on_frame_changed(self, frame: int) -> None:
         """
         Handle the event when the frame slider is changed. Update the current frame and refresh the image.
@@ -774,7 +647,7 @@ class CellImageController:
         Handle the event when the skip cell button is clicked. Mark the current cell as rejected and move to the next cell."""
         # Mark current cell as rejected by setting the process flag to False.
         self.df.iloc[self.current_idx, self.df.columns.get_loc('process')] = False
-        self._move_to_next_cell()
+        self._refresh_state_icon()
 
     def on_keep_cell(self) -> None:
         """
@@ -782,7 +655,7 @@ class CellImageController:
         """
         # Mark current cell for processing.
         self.df.iloc[self.current_idx, self.df.columns.get_loc('process')] = True
-        self._move_to_next_cell()
+        self._refresh_state_icon()
 
     def on_cell_slider_changed(self, cell_number: int) -> None:
         """
@@ -803,16 +676,6 @@ class CellImageController:
         selected_count = int(self.df['process'].sum())
         # Update the info panel (and overlay indicator) without loading a new image.
         self.view.update_info_preview(index, self.total_cells, ratio, processed, selected_count)
-
-    def _move_to_next_cell(self) -> None:
-        """
-        Move to the next cell in the DataFrame. If at the end, loop back to the start.
-        """
-        if self.current_idx < len(self.df) - 1:
-            self.current_idx += 1
-        else:
-            self.current_idx = 0
-        self._load_cell()
 
     def on_process_cells(self) -> None:
         """
