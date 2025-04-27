@@ -1,10 +1,8 @@
 from __future__ import annotations
-from enum import Enum
-from typing import Callable, Iterable
 
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QPixmap, QImage, QIcon, QShortcut, QKeySequence
+from PyQt6.QtGui import QPixmap, QImage, QIcon
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
@@ -13,70 +11,10 @@ from scipy.ndimage import binary_dilation
 import numpy as np
 
 from celltinder.backend.data_loader import DataLoader
+from celltinder.guis.utilities.shortcuts import ShortcutManager
+from celltinder.guis.utilities.widgets_utilities import BaseToolBar
 
 
-class Shortcuts(Enum):
-    NEXT_CELL      = ("6", "Move to next cell",     "on_next_cell")
-    PREVIOUS_CELL  = ("4", "Move to previous cell", "on_previous_cell")
-    KEEP_CELL      = ("s", "Keep cell",             "on_keep_cell")
-    REJECT_CELL    = ("r", "Reject cell",           "on_reject_cell")
-    TOGGLE_OVERLAY = ("m", "Toggle overlay mask",   "_toggle_overlay")
-    NEXT_FRAME     = ("8", "Advance frame",         "_bump_frame")
-
-    def __init__(self, key: str, desc: str, method_name: str):
-        self._key = key
-        self._desc = desc
-        self._method = method_name
-    
-    @property
-    def key(self) -> str:
-        return self._key
-
-    @property
-    def desc(self) -> str:
-        return self._desc
-
-    @property
-    def method(self) -> str:
-        return self._method
-
-
-class BaseToolBar(QWidget):
-    """HBox toolbar whose buttons & signals are declared in a list."""
-    def __init__(self, buttons: Iterable[tuple[str, str]], parent=None):
-        """
-        buttons: iterable of (text, attr_name)  
-        An attr named *attr_name* is created to host the button **and** a
-        pyqtSignal with the same name + "Clicked".
-        """
-        super().__init__(parent)
-        self._box = QHBoxLayout(self)
-        self._box.setContentsMargins(0, 0, 0, 0)
-        self._box.addStretch()
-
-        for text, name in buttons:
-            self._add_button(text, name)
-
-    def __getattr__(self, item) -> pyqtSignal:
-        """
-        Create a signal when the attribute is accessed for the first time.
-        """
-        if item.endswith("Clicked"):
-            self.__dict__[item] = pyqtSignal()
-            return self.__dict__[item]
-        raise AttributeError(item)
-
-    def _add_button(self, text: str, name: str) -> None:
-        """
-        Create a button with the given text and name, and connect it to the signal.
-        """
-        btn = QPushButton(text, self)
-        btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        sig = getattr(self, f"{name}Clicked")
-        btn.clicked.connect(sig.emit)
-        setattr(self, name, btn)
-        self._box.addWidget(btn)
-        self._box.addStretch()
 
 
 class TopBar(BaseToolBar):
@@ -84,13 +22,13 @@ class TopBar(BaseToolBar):
     helpClicked = pyqtSignal()
 
     def __init__(self, parent=None):
-        super().__init__([("Back to histo gui", "back")], parent)
+        super().__init__([("To Flame Filter", "back")], parent)
         
         # remove the first stretch so the button hugs the left edge
         self._box.takeAt(0)
         self._box.addStretch()
         
-        self.back.clicked.disconnect()          # disconnect generic emit
+        self.back.clicked.disconnect()
         self.back.clicked.connect(self.backClicked.emit)
         
         help_btn = QPushButton(self)
@@ -142,7 +80,7 @@ class ContentAreaWidget(QWidget):
         self.layout = QVBoxLayout(self)
         
         # --- Title ---
-        self.title_label = QLabel("Select Cell")
+        self.title_label = QLabel("Find your cell crush!")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.layout.addWidget(self.title_label)
         
@@ -235,7 +173,6 @@ class ContentAreaWidget(QWidget):
         self.cell_slider_area.addWidget(self.cell_slider)
         self.layout.addLayout(self.cell_slider_area)
 
-    # TODO: Remove both slider from the ContentArea
     def _init_image_display(self) -> None:
         """
         Sets up the image display area: just a single QLabel that expands,
@@ -258,7 +195,6 @@ class ContentAreaWidget(QWidget):
         self._init_overlay_checkbox()  # this creates self.overlay_checkbox
         self.overlay_checkbox.setParent(self.image_label)
         self.overlay_checkbox.show()
-
 
     def _init_overlay_checkbox(self) -> None:
         """
@@ -421,7 +357,7 @@ class ContentAreaWidget(QWidget):
         """
         return QSize(0, 0)
 
-class CellImageView(QMainWindow):
+class CellView(QMainWindow):
     # Define signals to propagate actions from the subwidgets.
     backClicked = pyqtSignal()
     previousCellClicked = pyqtSignal()
@@ -435,7 +371,7 @@ class CellImageView(QMainWindow):
     
     def __init__(self, n_frames: int) -> None:
         super().__init__()
-        self.setWindowTitle("Cell Image View")
+        self.setWindowTitle("Cell Crush")
 
         # Initialize central widget and main layout.
         self.main_widget = QWidget()
@@ -498,8 +434,8 @@ CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                          'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
                          'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
-class CellImageController:
-    def __init__(self, data_loader: DataLoader, view: CellImageView) -> None:
+class CellCrush():
+    def __init__(self, data_loader: DataLoader, view: CellView) -> None:
         
         self.data = data_loader
         self.data.add_process_col()
@@ -768,28 +704,3 @@ class CellImageController:
         return len(self.df) 
 
 
-class ShortcutManager:
-    """
-    Centralize all shortcut bindings (from Shortcuts enum)
-    and show a help dialog.
-    """
-    def __init__(self, controller: CellImageController) -> None:
-        self._shortcuts: list[QShortcut] = []
-        self._ctrl = controller
-
-        def bind(key: str, slot: Callable) -> None:
-            sc = QShortcut(QKeySequence(key), controller.view)
-            sc.setContext(Qt.ShortcutContext.WindowShortcut)
-            sc.activated.connect(slot)
-            self._shortcuts.append(sc)
-
-        # bind each enum entry to the matching controller method
-        for sc in Shortcuts:
-            bind(sc.key, getattr(controller, sc.method))
-
-    def show_shortcuts(self):
-        from PyQt6.QtWidgets import QMessageBox
-        msg = QMessageBox(self._ctrl.view)
-        msg.setWindowTitle("Keyboard Shortcuts")
-        msg.setText("\n".join(f"{sc.key} : {sc.desc}" for sc in Shortcuts))
-        msg.exec()

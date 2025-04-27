@@ -57,14 +57,16 @@ class DraggableLine:
         # re-bind to the new Line2D instance
         self.line = line
 
-
+# Constants for figure size and DPI
+FIG_SIZE = (5, 55)  # inches
+DPI = 100  # dots per inch
 class GraphWidget(QWidget):
     """
     Widget that displays the matplotlib graph along with its navigation toolbar.
     """
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.figure = Figure(figsize=(10, 6))
+        self.figure = Figure(figsize=FIG_SIZE, dpi=DPI)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setMinimumSize(0, 0)
         self.toolbar = NavigationToolbar(self.canvas, self)
@@ -119,7 +121,7 @@ class GraphWidget(QWidget):
         
         ax.set_xlabel("Ratio")
         ax.set_ylabel("Count")
-        ax.set_title("Histogram of Ratio")
+        ax.set_title("Flame Filter - Intensity Ratio")
         ax.set_yscale('log', base=10)
         self.canvas.draw()
 
@@ -170,7 +172,7 @@ class GraphWidget(QWidget):
         self._span_start = None
         
         
-class ControlsWidget(QWidget):
+class ThresholdPanel(QWidget):
     """
     Widget that contains the threshold input controls and cell count display.
     """
@@ -245,16 +247,16 @@ class BottomBarWidget(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.addStretch()
-        self.next_button = QPushButton("Next")
+        self.next_button = QPushButton("Find your cell-mate")
         layout.addWidget(self.next_button)
 
-class HistogramView(QMainWindow):
+class FlameView(QMainWindow):
     """
     Main window for the histogram GUI.
     """
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Histogram GUI")
+        self.setWindowTitle("Flame Filter")
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
@@ -264,7 +266,7 @@ class HistogramView(QMainWindow):
         self.main_layout.addWidget(self.graph_widget)
 
         # Create and add the controls area (threshold inputs and cell count)
-        self.controls_widget = ControlsWidget()
+        self.controls_widget = ThresholdPanel()
         self.main_layout.addWidget(self.controls_widget)
 
         # Create and add the bottom bar with the "Next" button
@@ -310,8 +312,8 @@ class HistogramView(QMainWindow):
         """
         return self.bottom_bar.next_button
 
-class HistogramController:
-    def __init__(self, model: DataLoader, view: HistogramView) -> None:
+class FlameFilter:
+    def __init__(self, model: DataLoader, view: FlameView) -> None:
         self.model = model
         self.view = view
         
