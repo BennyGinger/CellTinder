@@ -66,7 +66,7 @@ class GraphWidget(QWidget):
         super().__init__(parent)
         self.figure = Figure(figsize=(10, 6))
         self.canvas = FigureCanvas(self.figure)
-        self.canvas.setMinimumSize(1000, 800)
+        self.canvas.setMinimumSize(0, 0)
         self.toolbar = NavigationToolbar(self.canvas, self)
         
         # Create a span selector for selecting ranges and connecting it to the canvas
@@ -258,7 +258,6 @@ class HistogramView(QMainWindow):
         self.main_widget = QWidget()
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
-        self.resize(1500, 1000)
 
         # Create and add the graph area (graph and toolbar)
         self.graph_widget = GraphWidget()

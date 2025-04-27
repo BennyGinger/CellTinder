@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt6.QtCore import QSize
 
 from celltinder.backend.data_loader import DataLoader
 from celltinder.gui.views.histo_view import HistogramView, HistogramController
@@ -18,6 +19,11 @@ class MainApp(QMainWindow):
         # Stacked widget to hold different pages
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
+        
+        # allow the window + stack to go down to zero if needed
+        self.stack.setMinimumSize(0, 0)
+        self.centralWidget().setMinimumSize(0, 0)
+        self.setMinimumSize(0, 0)
 
         # Initialize the data loader (shared between both views)
         self.data_loader = DataLoader(csv_path)
@@ -77,16 +83,25 @@ class MainApp(QMainWindow):
         self.cell_view = None
         self.cell_ctrl = None
 
+    def _decoration_delta(self):
+        """
+        Returns the extra pixels of window chrome + top/bottom bars
+        to add back on top of the content-area’s pure height.
+        """
+        total_h = self.height()
+        central_h = self.centralWidget().height()
+        return total_h - central_h
+
 
 def main(csv_path: Path) -> None:
     app = QApplication(sys.argv)
     window = MainApp(csv_path)
-    window.resize(500, 500)
+    window.showMaximized()
     window.show()
     sys.exit(app.exec())
 
 if __name__ == "__main__":
     
-    csv_path = Path("/media/ben/Analysis/Python/CellTinder/ImagesTest/A1/A1_cell_data.csv")
-    # csv_path = Path("/home/ben/Lab/Python/CellTinder/ImagesTest/20250320_test_short/A1/A1_cell_data.csv")
+    # csv_path = Path("/media/ben/Analysis/Python/CellTinder/ImagesTest/A1/A1_cell_data.csv")
+    csv_path = Path("/home/ben/Lab/Python/CellTinder/ImagesTest/20250320_test_short/A1/A1_cell_data.csv")
     main(csv_path)

@@ -2,10 +2,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Callable, Iterable
 
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy, QGridLayout, QMessageBox
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QPixmap, QImage, QIcon
-from PyQt6.QtGui import QShortcut, QKeySequence
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy
+from PyQt6.QtCore import pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QPixmap, QImage, QIcon, QShortcut, QKeySequence
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
@@ -40,6 +39,7 @@ class Shortcuts(Enum):
     @property
     def method(self) -> str:
         return self._method
+
 
 class BaseToolBar(QWidget):
     """HBox toolbar whose buttons & signals are declared in a list."""
@@ -131,6 +131,12 @@ class ContentAreaWidget(QWidget):
 
     def __init__(self, n_frames: int, parent=None):
         super().__init__(parent)
+        # set the size policy to allow for dynamic resizing
+        sp = self.sizePolicy()
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
+        self.setMinimumSize(0, 0)
+        
         self.n_frames = n_frames
         self.total_cells = 100  # Default; will be updated by the controller.
         self.layout = QVBoxLayout(self)
@@ -148,6 +154,9 @@ class ContentAreaWidget(QWidget):
         
         # --- Image Display Area ---
         self._init_image_display()
+        # ensure the label expands, but doesn’t itself stretch the pixmap:
+        self.image_label.setScaledContents(False)
+        self._raw_pixmap: QPixmap | None = None
         
         # --- Frame Slider Area ---
         self._init_frame_slider_area()
@@ -229,29 +238,27 @@ class ContentAreaWidget(QWidget):
     # TODO: Remove both slider from the ContentArea
     def _init_image_display(self) -> None:
         """
-        Sets up the image display area including an overlay indicator. The image and state indicator are placed in a grid layout to allow overlap.
+        Sets up the image display area: just a single QLabel that expands,
+        plus two overlay widgets parented to that QLabel.
         """
-        self.image_container = QWidget()
-        self.image_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        grid_layout = QGridLayout(self.image_container)
-        grid_layout.setContentsMargins(0, 0, 0, 0)
-        grid_layout.setSpacing(0)
-
+        # — the image label itself —
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        grid_layout.addWidget(self.image_label, 0, 0)
-        
-        self.state_indicator_label = QLabel("✗")
+        self.image_label.setScaledContents(False)   # we manually scale in _update_scaled_pixmap
+        self.layout.addWidget(self.image_label)
+        self.image_label.setMinimumSize(0, 0)
+
+        # — the state indicator, as a child of the label —
+        self.state_indicator_label = QLabel("✗", parent=self.image_label)
         self.state_indicator_label.setStyleSheet(self.INDICATOR_STYLE.format(color="red"))
-        self.state_indicator_label.setContentsMargins(0, 10, 20, 0)
-        grid_layout.addWidget(self.state_indicator_label, 0, 0, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
-        
-        # Add the overlay checkbox to the grid layout.
-        self._init_overlay_checkbox()
-        grid_layout.addWidget(self.overlay_checkbox, 0, 0, alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter)
-        
-        self.layout.addWidget(self.image_container)
+        self.state_indicator_label.show()
+
+        # — the overlay checkbox, also as a child of the label —
+        self._init_overlay_checkbox()  # this creates self.overlay_checkbox
+        self.overlay_checkbox.setParent(self.image_label)
+        self.overlay_checkbox.show()
+
 
     def _init_overlay_checkbox(self) -> None:
         """
@@ -347,11 +354,72 @@ class ContentAreaWidget(QWidget):
 
     def setImage(self, pixmap: QPixmap) -> None:
         """
-        Sets the image in the display area. The image is scaled to fit the label.
-        Args:
-            pixmap: The QPixmap to display.
+        Called by the controller with the full-resolution pixmap.
         """
-        self.image_label.setPixmap(pixmap)
+        self._raw_pixmap = pixmap
+        self._update_scaled_pixmap()
+    
+    def resizeEvent(self, event):
+        """
+        Whenever our widget (and thus the label) resizes, rescale the pixmap.
+        """
+        super().resizeEvent(event)
+        self._update_scaled_pixmap()
+
+    def _update_scaled_pixmap(self):
+        """
+        Scale the stored raw pixmap to fit the label, keeping aspect ratio. Also position the state indicator and checkbox.
+        """
+        if not self._raw_pixmap:
+            return
+
+        lbl_size = self.image_label.size()
+        scaled = self._raw_pixmap.scaled(lbl_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.image_label.setPixmap(scaled)
+        self._aspect_ratio = scaled.width() / scaled.height()
+        
+        # --- now compute where the pixmap actually sits inside the label ---
+        lbl_w = self.image_label.width()
+        lbl_h = self.image_label.height()
+        pix_w = scaled.width()
+        pix_h = scaled.height()
+        x0 = (lbl_w - pix_w) / 2
+        y0 = (lbl_h - pix_h) / 2
+        margin = 10  # pixels from the edge of the pixmap
+
+        # --- move the state indicator to top-right of the pixmap ---
+        si = self.state_indicator_label
+        si.adjustSize()
+        w_si, h_si = si.width(), si.height()
+        si.move(int(x0 + pix_w - w_si - margin), int(y0 + margin))
+        si.raise_()
+
+        # --- move the checkbox to bottom-center of the pixmap ---
+        cb = self.overlay_checkbox
+        cb.adjustSize()
+        w_cb, h_cb = cb.width(), cb.height()
+        cb_x = x0 + (pix_w - w_cb) / 2
+        cb_y = y0 + pix_h - h_cb - margin
+        cb.move(int(cb_x), int(cb_y))
+        cb.raise_()
+
+    def heightForWidth(self, w: int) -> int:
+        """
+        Returns the height for a given width, maintaining the aspect ratio.
+        This is used to ensure that the image label maintains its aspect ratio when resized.
+        """
+        # Qt will ask you “if I have width=w, what height should I be?”
+        ar = getattr(self, "_aspect_ratio", None)
+        if ar is not None and ar > 0:
+            return int(w / ar)
+        # fallback to default
+        return super().heightForWidth(w)
+    
+    def minimumSizeHint(self) -> QSize:
+        """
+        Allows the widget to be resized to a minimum size.
+        """
+        return QSize(0, 0)
 
 class CellImageView(QMainWindow):
     # Define signals to propagate actions from the subwidgets.
@@ -368,7 +436,6 @@ class CellImageView(QMainWindow):
     def __init__(self, n_frames: int) -> None:
         super().__init__()
         self.setWindowTitle("Cell Image View")
-        self.resize(1000, 1000)
 
         # Initialize central widget and main layout.
         self.main_widget = QWidget()
