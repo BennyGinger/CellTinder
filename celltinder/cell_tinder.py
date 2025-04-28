@@ -12,6 +12,7 @@ from celltinder.guis.views.flame_view import FlameView
 
 # TODO: Develop a similar GUI for view the cells after illumination with their red channel
 # TODO: Add flexibility to this gui to allow users to visualize their analysises and select cells for display
+# TODO: Sort out the pytests
 class CellTinder(QMainWindow):
     """
     Main application window managing the histogram and cell image views.

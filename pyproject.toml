@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-celltinder = "celltinder:main"
+celltinder = "celltinder:run_cell_tinder"
 
 [build-system]
 requires = ["hatchling"]
