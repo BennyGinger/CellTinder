@@ -9,14 +9,17 @@ from celltinder.backend.cell_image_set import CellImageSet
 class DataLoader:
     """Class to load and filter data from a CSV file. Specific to your our pipeline."""
     
-    def __init__(self, csv_file: Path) -> None:
+    def __init__(self, csv_file: Path, n_frames: int, crop_size: int) -> None:
         """Initialize the LoadData object with a CSV file."""
+        
+        self.n_frames = n_frames
+        self.crop_size = crop_size
         
         self.csv_path: Path = csv_file
         self.df = pd.read_csv(csv_file)
         self.ratios = self.df['ratio']
         # Set default thresholds
-        self.retrieve_threshold_range()
+        self.load_threshold_bounds()
 
     def filter_ratio(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
         """
@@ -42,22 +45,13 @@ class DataLoader:
         filtered = self.filter_ratio(lower, upper)
         return len(filtered)
     
-    # TODO: Merge with retrieve_threshold_range
-    def update_thresholds(self, lower: float, upper: float, new_column: str) -> None:
-        """
-        Update the thresholds and add a new column to the DataFrame.
-        """
-        self.lower = lower
-        self.upper = upper
-        self.column_thresholds = new_column
-    
     def save_csv(self) -> None:
         """
         Save the data to a new CSV file.
         """
         self.df.to_csv(self.csv_path, index=False)
 
-    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask', n_frames: int = 2, crop_size: int = 151) -> CellImageSet:
+    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask') -> CellImageSet:
         """
         Load and crop all images or masks for a specific cell.
         
@@ -65,8 +59,6 @@ class DataLoader:
             cell_idx: Index of the cell to load from the dataframe
             img_label: Label of the image files
             mask_label: Label of the mask files
-            n_frames: Number of frames to load
-            box_size: Size of the cropped images
         
         Returns:
             CellArrays: A CellArrays object containing the loaded and cropped images and masks
@@ -86,7 +78,7 @@ class DataLoader:
         pre_img_path = img_dir.joinpath(f"{fov_ID}_{img_label}.tif")
         pre_mask_path = mask_dir.joinpath(f"{fov_ID}_{mask_label}.tif")
         
-        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, n_frames, crop_size)
+        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, self.n_frames, self.crop_size)
 
     def _build_image_mask_dirs(self, fov_ID: str) -> tuple[Path, Path]:
         """
@@ -113,30 +105,27 @@ class DataLoader:
         
         self.df.update(pos_df)
     
-    def retrieve_threshold_range(self) -> tuple[float, float]:
+    def load_threshold_bounds(self) -> tuple[float, float]:
         """
         Check if the DataFrame contains a threshold column that follows the pattern "float < x < float".
         If found, extract the lower and upper bounds; otherwise, use default values.
         """
-        threshold_cols = [col for col in self.df.columns if "< x <" in col]
-        if threshold_cols:
-            # Extract the two float values using a regex pattern.
-            pattern = r"([\d\.]+)\s*<\s*x\s*<\s*([\d\.]+)"
-            match = re.match(pattern, threshold_cols[0])
-            if match:
-                lower_bound = float(match.group(1))
-                upper_bound = float(match.group(2))
-                self.update_thresholds(lower_bound, upper_bound, threshold_cols[0])
-            else:
-                # Fall back to default values if regex fails.
-                lower_bound = self.default_lower
-                upper_bound = self.default_upper
-        else:
-            # If no threshold column is found, set default values.
-            lower_bound = self.default_lower
-            upper_bound = self.default_upper
-            self.update_thresholds(self.default_lower, self.default_upper, None)
-        return lower_bound, upper_bound
+        pattern = r"([\d\.]+)\s*<\s*x\s*<\s*([\d\.]+)"
+        cols = [c for c in self.df.columns if "< x <" in c]
+
+        # start with the defaults
+        lower, upper = self.default_lower, self.default_upper
+        col_name = None
+
+        if cols:
+            col_name = cols[0]
+            m = re.match(pattern, col_name)
+            if m:
+                lower, upper = float(m.group(1)), float(m.group(2))
+
+        # now set once
+        self.lower, self.upper, self.column_thresholds = lower, upper, col_name
+        return lower, upper
     
     @property
     def default_lower(self) -> float:

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pandas as pd
 import tifffile as tiff
 import numpy as np
 
@@ -8,7 +7,7 @@ import numpy as np
 class CellImageSet:
     """ Class to load and crop all images and masks from a specific cell."""
     
-    def __init__(self, cell_centroid: tuple[float, float], pre_img_path: Path, pre_mask_path: Path, cell_mask_value: int, n_frames: int = 2, box_size: int = 150) -> None:
+    def __init__(self, cell_centroid: tuple[float, float], pre_img_path: Path, pre_mask_path: Path, cell_mask_value: int, n_frames: int, box_size: int) -> None:
         """Initialize the CellArrays object with the paths to the images and masks. 
         
         Args:

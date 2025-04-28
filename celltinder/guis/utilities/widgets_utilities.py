@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Iterable
 
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSizePolicy

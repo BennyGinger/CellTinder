@@ -4,17 +4,22 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget
 
 from celltinder.backend.data_loader import DataLoader
-from celltinder.guis.flame_filter import FlameView, FlameFilter
-from celltinder.guis.cell_crush import CellView, CellCrush
+from celltinder.guis.flame_filter import FlameFilter
+from celltinder.guis.views.cell_view import CellView
+from celltinder.guis.cell_crush import CellCrush
+from celltinder.guis.views.flame_view import FlameView
 
 class CellTinder(QMainWindow):
     """
     Main application window managing the histogram and cell image views.
     Uses a QStackedWidget to switch between the two GUIs.
     """
-    def __init__(self, csv_path: Path) -> None:
+    def __init__(self, csv_path: Path, n_frames: int, crop_size: int) -> None:
         super().__init__()
         self.setWindowTitle("CellTinder")
+        
+        self.n_frames = n_frames
+        
         # Stacked widget to hold different pages
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -25,7 +30,7 @@ class CellTinder(QMainWindow):
         self.setMinimumSize(0, 0)
 
         # Initialize the data loader (shared between both views)
-        self.data_loader = DataLoader(csv_path)
+        self.data_loader = DataLoader(csv_path, n_frames, crop_size)
 
         # --- Histogram Page ---
         self.flame_view = FlameView()
@@ -47,12 +52,8 @@ class CellTinder(QMainWindow):
         # Apply thresholds and save via histogram controller
         self.flame_filter.on_next_pressed()
 
-        # Determine number of frames by loading the first cell
-        first_cell = self.data_loader.loads_arrays(0)
-        n_frames = len(first_cell.imgs)
-
         # Create and initialize cell view and controller
-        self.cell_view = CellView(n_frames)
+        self.cell_view = CellView(self.n_frames)
         self.cell_crush = CellCrush(self.data_loader, self.cell_view)
 
         # Connect back button to return to histogram
@@ -82,7 +83,7 @@ class CellTinder(QMainWindow):
         self.cell_view = None
         self.cell_crush = None
 
-    def _decoration_delta(self):
+    def _decoration_delta(self) -> int:
         """
         Returns the extra pixels of window chrome + top/bottom bars
         to add back on top of the content-area's pure height.
@@ -92,15 +93,23 @@ class CellTinder(QMainWindow):
         return total_h - central_h
 
 
-def run_cell_tinder(csv_path: Path) -> None:
+def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> None:
+    """
+    Run the CellTinder application.
+    Args:
+        csv_path: Path to the CSV file containing cell data.
+        n_frames: Number of frames to load for each cell.
+        crop_size: Size of the cropped images.
+    """
     app = QApplication(sys.argv)
-    window = CellTinder(csv_path)
+    window = CellTinder(csv_path, n_frames, crop_size)
     # window.showMaximized()
     window.show()
     sys.exit(app.exec())
 
+
 if __name__ == "__main__":
     
-    # csv_path = Path("/media/ben/Analysis/Python/CellTinder/ImagesTest/A1/A1_cell_data.csv")
-    csv_path = Path("/home/ben/Lab/Python/CellTinder/ImagesTest/20250320_test_short/A1/A1_cell_data.csv")
+    csv_path = Path("/media/ben/Analysis/Python/CellTinder/ImagesTest/A1/A1_cell_data.csv")
+    # csv_path = Path("/home/ben/Lab/Python/CellTinder/ImagesTest/20250320_test_short/A1/A1_cell_data.csv")
     run_cell_tinder(csv_path)
