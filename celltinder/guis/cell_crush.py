@@ -42,35 +42,10 @@ class CellCrush():
     """
     def __init__(self, data_loader: DataLoader, view: CellView) -> None:
         
-        # Initialize the data loader and DataFrame.
-        self._init_data_loader(data_loader, img_label, mask_label, n_frames, crop_size)          
-
-        # Setup view and connect signals...
-        self._init_view(view)
-
-        # Load the first cell using its index from the df.
-        self._load_cell()
-
-    #----------------
-    # Controller Methods
-    #----------------
-
-    def _init_data_loader(self, data_loader: DataLoader, img_label: str, mask_label: str, n_frames: int, crop_size: int) -> None:
-        """
-        Initialize the data loader and DataFrame. 
-        """
-        # Set the image and mask labels.
-        self.img_label = img_label
-        self.mask_label = mask_label
-        self.n_frames = n_frames
-        self.crop_size = crop_size
-        
-        # Extract the DataFrame from the data loader. Add a process column to it.
         self.data = data_loader
         self.data.add_process_col()
         self.df = self.data.pos_df
-        
-        # Set the initial index and frame.
+        # Starting index for the positive cells
         self.current_idx = 0
         self.current_frame = 1          
         
@@ -134,9 +109,9 @@ class CellCrush():
         Load the current cell based on the current index.
         """
         # Use the DataLoader to fetch the images and masks for the current cell.
-        self.current_cell = self.data.loads_arrays(self.current_idx, self.img_label, self.mask_label, self.n_frames, self.crop_size)
-        
+        cell_image_set = self.data.loads_arrays(self.current_idx)
         # Update the view with new cell info.
+        self.current_cell = cell_image_set
         self._update_view()
         
     def _update_view(self) -> None:

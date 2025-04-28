@@ -7,6 +7,8 @@ import pandas as pd
 
 from celltinder.backend.cell_image_set import CellImageSet
 
+DEFAULT_COL_NAME = 'ratio'
+
 class DataLoader:
     """
     Class to load and filter data from a CSV file. Specific to your our pipeline.
