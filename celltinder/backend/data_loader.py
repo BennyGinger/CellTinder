@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pandas as pd
 
 from celltinder.backend.cell_image_set import CellImageSet
-
-
-DEFAULT_COL_NAME = 'ratio'
-# TODO: implement a frame column in the csv file -> self.n_frames can then be set automatically
 
 class DataLoader:
     """
     Class to load and filter data from a CSV file. Specific to your our pipeline.
     """
     
-    def __init__(self, csv_file: Path) -> None:
+    def __init__(self, csv_file: Path, n_frames: int, crop_size: int) -> None:
         """Initialize the LoadData object with a CSV file."""
+        
+        self.n_frames = n_frames
+        self.crop_size = crop_size
         
         self.csv_path: Path = csv_file
         self.df = pd.read_csv(csv_file)
@@ -25,11 +25,9 @@ class DataLoader:
         self.ratios = self.df[DEFAULT_COL_NAME]
         
         # Set default thresholds
-        self.lower = self.default_lower
-        self.upper = self.default_upper
-        self.column_thresholds = DEFAULT_COL_NAME
+        self.load_threshold_bounds()
 
-    def filter_data(self, lower: float, upper: float, col_name: str = DEFAULT_COL_NAME) -> pd.DataFrame:
+    def filter_ratio(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
         """
         Filter the data based on the lower and upper thresholds.
         Args:
@@ -50,16 +48,8 @@ class DataLoader:
         Returns:
             int: Number of cells within the thresholds
         """
-        filtered = self.filter_data(lower, upper)
+        filtered = self.filter_ratio(lower, upper)
         return len(filtered)
-    
-    def update_thresholds(self, lower: float, upper: float, new_column: str) -> None:
-        """
-        Update the thresholds and add a new column to the DataFrame.
-        """
-        self.lower = lower
-        self.upper = upper
-        self.column_thresholds = new_column
     
     def save_csv(self) -> None:
         """
@@ -67,7 +57,7 @@ class DataLoader:
         """
         self.df.to_csv(self.csv_path, index=False)
 
-    def loads_arrays(self, cell_idx: int, img_label: str, mask_label: str, n_frames: int, crop_size: int) -> CellImageSet:
+    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask') -> CellImageSet:
         """
         Load and crop all images or masks for a specific cell.
         
@@ -75,8 +65,6 @@ class DataLoader:
             cell_idx: Index of the cell to load from the dataframe
             img_label: Label of the image files
             mask_label: Label of the mask files
-            n_frames: Number of frames to load
-            box_size: Size of the cropped images
         
         Returns:
             CellArrays: A CellArrays object containing the loaded and cropped images and masks
@@ -96,7 +84,7 @@ class DataLoader:
         pre_img_path = img_dir.joinpath(f"{fov_ID}_{img_label}.tif")
         pre_mask_path = mask_dir.joinpath(f"{fov_ID}_{mask_label}.tif")
         
-        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, n_frames, crop_size)
+        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, self.n_frames, self.crop_size)
 
     def _build_image_mask_dirs(self, fov_ID: str) -> tuple[Path, Path]:
         """
@@ -123,6 +111,28 @@ class DataLoader:
         
         self.df.update(pos_df)
     
+    def load_threshold_bounds(self) -> tuple[float, float]:
+        """
+        Check if the DataFrame contains a threshold column that follows the pattern "float < x < float".
+        If found, extract the lower and upper bounds; otherwise, use default values.
+        """
+        pattern = r"([\d\.]+)\s*<\s*x\s*<\s*([\d\.]+)"
+        cols = [c for c in self.df.columns if "< x <" in c]
+
+        # start with the defaults
+        lower, upper = self.default_lower, self.default_upper
+        col_name = None
+
+        if cols:
+            col_name = cols[0]
+            m = re.match(pattern, col_name)
+            if m:
+                lower, upper = float(m.group(1)), float(m.group(2))
+
+        # now set once
+        self.lower, self.upper, self.column_thresholds = lower, upper, col_name
+        return lower, upper
+    
     @property
     def default_lower(self) -> float:
         """Return the default lower threshold."""
@@ -135,6 +145,7 @@ class DataLoader:
     
     @property
     def pos_df(self) -> pd.DataFrame:
-        """Return the DataFrame containing positive cells sorted by DEFAULT_COL_NAME."""
-        
-        return self.filter_data(self.lower, self.upper, self.column_thresholds).sort_values(by=DEFAULT_COL_NAME, ascending=False)
+        """Return the DataFrame containing positive cells sorted by ratio."""
+        if self.column_thresholds is None:
+            raise ValueError("No threshold column found. Please set thresholds first.")
+        return self.df.loc[self.df[self.column_thresholds] == True].sort_values(by='ratio', ascending=False)
