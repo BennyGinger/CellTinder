@@ -9,6 +9,9 @@ from celltinder.guis.views.cell_view import CellView
 from celltinder.guis.cell_crush import CellCrush
 from celltinder.guis.views.flame_view import FlameView
 
+
+# TODO: Develop a similar GUI for view the cells after illumination with their red channel
+# TODO: Add flexibility to this gui to allow users to visualize their analysises and select cells for display
 class CellTinder(QMainWindow):
     """
     Main application window managing the histogram and cell image views.
@@ -92,7 +95,7 @@ class CellTinder(QMainWindow):
         central_h = self.centralWidget().height()
         return total_h - central_h
 
-
+# TODO: Sort out the size of the window
 def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> None:
     """
     Run the CellTinder application.
