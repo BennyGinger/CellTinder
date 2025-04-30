@@ -52,6 +52,7 @@ class CellCrush():
         # Setup view and connect signals...
         self.view = view
         self.view.total_cells = len(self.df)
+        self.view.top_bar.backClicked.connect(self.on_back_to_flame)
         self.view.previousCellClicked.connect(self.on_previous_cell)
         self.view.skipCellClicked.connect(self.on_reject_cell)
         self.view.keepCellClicked.connect(self.on_keep_cell)
@@ -102,6 +103,10 @@ class CellCrush():
         Mark or unmark the current cell, then refresh the icon/text.
         """
         self.df.iat[self.current_idx, self.df.columns.get_loc('process')] = keep
+        # Update the process column in the DataFrame and save it.
+        self.data.update_cell_to_process_in_df(self.df)
+        self.data.save_csv()
+        # Refresh the view to reflect the changes.
         self._refresh_info(preview=False)
 
     def _load_cell(self) -> None:
@@ -300,6 +305,16 @@ class CellCrush():
         # Shut down the GUI.
         QApplication.instance().quit()
 
+    def on_back_to_flame(self) -> None:
+        """
+        Handle the event when the back button is clicked. This will save the current state and close the view.
+        """
+        self.data.update_cell_to_process_in_df(self.df)
+        self.data.save_csv()
+
+        # Close this window…
+        self.view.close()
+    
     @property
     def total_cells(self) -> int:
         """
