@@ -109,7 +109,7 @@ def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> 
     window = CellTinder(csv_path, n_frames, crop_size)
     # window.showMaximized()
     window.show()
-    sys.exit(app.exec())
+    app.exec()
 
 
 if __name__ == "__main__":

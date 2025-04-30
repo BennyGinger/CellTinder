@@ -298,8 +298,7 @@ class CellCrush():
         self.data.update_cell_to_process_in_df(self.df)
         self.data.save_csv()
         # Shut down the GUI.
-        main_win = self.view.window()
-        main_win.close()
+        QApplication.instance().quit()
 
     @property
     def total_cells(self) -> int:
