@@ -76,24 +76,25 @@ class DataLoader:
         
         # Extract cell specific parameters
         cell_centroid: tuple[float, float] = tuple(pos_df[['centroid_y', 'centroid_x']].iloc[cell_idx].values)
-        fov_ID = pos_df['fov_ID'].iloc[cell_idx]
-        cell_mask_value = pos_df['cell_numb'].iloc[cell_idx]
+        fov_id = pos_df['fov_id'].iloc[cell_idx]
+        cell_mask_value = pos_df['cell_label'].iloc[cell_idx]
         
         # Build img and mask directories
-        img_dir, mask_dir = self._build_image_mask_dirs(fov_ID)
+        img_dir, mask_dir = self._build_image_mask_dirs(fov_id)
         
         # Build arrays file pre-paths (missing the frame number)
-        pre_img_path = img_dir.joinpath(f"{fov_ID}_{img_label}.tif")
-        pre_mask_path = mask_dir.joinpath(f"{fov_ID}_{mask_label}.tif")
+        pre_img_path = img_dir.joinpath(f"{fov_id}_{img_label}.tif")
+        pre_mask_path = mask_dir.joinpath(f"{fov_id}_{mask_label}.tif")
         
         return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, self.n_frames, self.crop_size)
 
-    def _build_image_mask_dirs(self, fov_ID: str) -> tuple[Path, Path]:
+    def _build_image_mask_dirs(self, fov_id: str) -> tuple[Path, Path]:
         """
-        Build the image and mask directories based on the fov_ID.
+        Build the image and mask directories based on the fov_id.
         """
         # Build the folder names
-        well_ID = fov_ID.split('_')[0]
+        # FIXME: I need to change the split to 'P' later on
+        well_ID = fov_id.split('_')[0]
         img_folder_name = f"{well_ID}_images"
         mask_folder_name = f"{well_ID}_masks"
         # Build the folder paths

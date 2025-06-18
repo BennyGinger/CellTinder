@@ -85,8 +85,8 @@ class CellCrush():
         ratio = self.df['ratio'].iat[idx]
         processed = self.df['process'].iat[idx]
         selected_count = int(self.df['process'].sum())
-        before = self.df['before_stim'].iat[idx]
-        after = self.df['after_stim'].iat[idx]
+        before = self.df['mean_pre_stim'].iat[idx]
+        after = self.df['mean_post_stim'].iat[idx]
         return ratio, processed, selected_count, before, after
 
     def _refresh_info(self, *, preview: bool = False) -> None:
