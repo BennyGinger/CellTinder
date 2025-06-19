@@ -109,7 +109,7 @@ def run_flame_filter(csv_path: Path, n_frames: int = 2, crop_size: int = 151) ->
     controller = FlameFilter(data, view)
     controller.view.show()
 
-    sys.exit(app.exec())
+    app.exec()
 
 
 if __name__ == '__main__':

@@ -76,8 +76,8 @@ class DataLoader:
         
         # Extract cell specific parameters
         cell_centroid: tuple[float, float] = tuple(pos_df[['centroid_y', 'centroid_x']].iloc[cell_idx].values)
-        fov_id = pos_df['fov_id'].iloc[cell_idx]
-        cell_mask_value = pos_df['cell_label'].iloc[cell_idx]
+        fov_id = pos_df['fov_ID'].iloc[cell_idx]
+        cell_mask_value = pos_df['cell_numb'].iloc[cell_idx]
         
         # Build img and mask directories
         img_dir, mask_dir = self._build_image_mask_dirs(fov_id)
