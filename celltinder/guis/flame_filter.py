@@ -3,7 +3,7 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from celltinder.backend.data_loader import DataLoader
+from celltinder.backend.data_loader import DataLoader, RATIO
 from celltinder.guis.views.flame_view import FlameView
 
 
@@ -68,7 +68,7 @@ class FlameFilter:
             self.model.df.drop(columns=threshold_cols, inplace=True)
             
         # Add a new column to the DataFrame based on the threshold values
-        self.model.df[column_name] = self.model.df['ratio'].apply(lambda x: lower_val < x < upper_val)
+        self.model.df[column_name] = self.model.df[RATIO].apply(lambda x: lower_val < x < upper_val)
         self.model.save_csv()
         self.model.load_threshold_bounds()
 

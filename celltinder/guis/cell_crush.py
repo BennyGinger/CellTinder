@@ -11,7 +11,7 @@ from matplotlib.figure import Figure
 from scipy.ndimage import binary_dilation
 import numpy as np
 
-from celltinder.backend.data_loader import DataLoader
+from celltinder.backend.data_loader import PROCESS, DataLoader, RATIO, BEFORE_STIM, AFTER_STIM
 from celltinder.guis.utilities.shortcuts import ShortcutManager
 from celltinder.guis.views.cell_view import CellView
 
@@ -82,11 +82,11 @@ class CellCrush():
         """
         if idx is None:
             idx = self.current_idx
-        ratio = self.df['ratio'].iat[idx]
-        processed = self.df['process'].iat[idx]
-        selected_count = int(self.df['process'].sum())
-        before = self.df['before_stim'].iat[idx]
-        after = self.df['after_stim'].iat[idx]
+        ratio = self.df[RATIO].iat[idx]
+        processed = self.df[PROCESS].iat[idx]
+        selected_count = int(self.df[PROCESS].sum())
+        before = self.df[BEFORE_STIM].iat[idx]
+        after = self.df[AFTER_STIM].iat[idx]
         return ratio, processed, selected_count, before, after
 
     def _refresh_info(self, *, preview: bool = False) -> None:
@@ -102,7 +102,7 @@ class CellCrush():
         """
         Mark or unmark the current cell, then refresh the icon/text.
         """
-        self.df.iat[self.current_idx, self.df.columns.get_loc('process')] = keep
+        self.df.iat[self.current_idx, self.df.columns.get_loc(PROCESS)] = keep
         # Update the process column in the DataFrame and save it.
         self.data.update_cell_to_process_in_df(self.df)
         self.data.save_csv()

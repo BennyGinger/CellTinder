@@ -7,7 +7,16 @@ import pandas as pd
 
 from celltinder.backend.cell_image_set import CellImageSet
 
-DEFAULT_COL_NAME = 'ratio'
+# FIXME: Modify the column names when calling the data, according to the changes in gem_screening
+# Define constants for column names
+RATIO = 'ratio'
+CELL_LABEL = 'cell_numb'
+FOV_ID = 'fov_ID'
+CENTROID_X = 'centroid_x'
+CENTROID_Y = 'centroid_y'
+BEFORE_STIM = 'before_stim'
+AFTER_STIM = 'after_stim'
+PROCESS = 'process'
 
 class DataLoader:
     """
@@ -24,7 +33,7 @@ class DataLoader:
         self.df = pd.read_csv(csv_file)
         if 'Unnamed: 0' in self.df.columns:
             self.df.drop(columns=['Unnamed: 0'], inplace=True)
-        self.ratios = self.df[DEFAULT_COL_NAME]
+        self.ratios = self.df[RATIO]
         
         # Set default thresholds
         self.load_threshold_bounds()
@@ -75,9 +84,9 @@ class DataLoader:
         pos_df = self.pos_df
         
         # Extract cell specific parameters
-        cell_centroid: tuple[float, float] = tuple(pos_df[['centroid_y', 'centroid_x']].iloc[cell_idx].values)
-        fov_id = pos_df['fov_ID'].iloc[cell_idx]
-        cell_mask_value = pos_df['cell_numb'].iloc[cell_idx]
+        cell_centroid: tuple[float, float] = tuple(pos_df[[CENTROID_Y, CENTROID_X]].iloc[cell_idx].values)
+        fov_id = pos_df[FOV_ID].iloc[cell_idx]
+        cell_mask_value = pos_df[CELL_LABEL].iloc[cell_idx]
         
         # Build img and mask directories
         img_dir, mask_dir = self._build_image_mask_dirs(fov_id)
@@ -104,10 +113,10 @@ class DataLoader:
         return img_path, mask_path
     
     def add_process_col(self) -> None:
-        """Add a 'process' column to the DataFrame."""
+        """Add a PROCESS column to the DataFrame."""
         
-        if 'process' not in self.df.columns:
-            self.df['process'] = False
+        if PROCESS not in self.df.columns:
+            self.df[PROCESS] = False
     
     def update_cell_to_process_in_df(self, pos_df: pd.DataFrame) -> None:
         """Update the DataFrame with the cells to process."""
