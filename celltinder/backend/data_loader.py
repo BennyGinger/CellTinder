@@ -11,7 +11,7 @@ from celltinder.backend.cell_image_set import CellImageSet
 # Define constants for column names
 RATIO = 'ratio'
 CELL_LABEL = 'cell_numb'
-FOV_ID = 'fov_ID'
+FOV_ID = 'fov_id'  # Changed from 'fov_ID' to match gem_screening output
 CENTROID_X = 'centroid_x'
 CENTROID_Y = 'centroid_y'
 BEFORE_STIM = 'before_stim'
@@ -102,8 +102,9 @@ class DataLoader:
         Build the image and mask directories based on the fov_id.
         """
         # Build the folder names
-        # FIXME: I need to change the split to 'P' later on
-        well_ID = fov_id.split('_')[0]
+        # Extract well ID from fov_id (e.g., A1P1 -> A1)
+        # Split on 'P' to get the well ID before the position
+        well_ID = fov_id.split('P')[0]
         img_folder_name = f"{well_ID}_images"
         mask_folder_name = f"{well_ID}_masks"
         # Build the folder paths
