@@ -102,9 +102,13 @@ class DataLoader:
         Build the image and mask directories based on the fov_id.
         """
         # Build the folder names
-        # Extract well ID from fov_id (e.g., A1P1 -> A1)
-        # Split on 'P' to get the well ID before the position
-        well_ID = fov_id.split('P')[0]
+        # Extract well ID from fov_id, handling both formats:
+        # Old format: A1_P1 -> A1
+        # New format: A1P1 -> A1
+        if '_P' in fov_id:
+            well_ID = fov_id.split('_P')[0]
+        else:
+            well_ID = fov_id.split('P')[0]
         img_folder_name = f"{well_ID}_images"
         mask_folder_name = f"{well_ID}_masks"
         # Build the folder paths
