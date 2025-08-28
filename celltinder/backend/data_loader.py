@@ -11,7 +11,7 @@ from celltinder.backend.cell_image_set import CellImageSet
 # Define constants for column names
 RATIO = 'ratio'
 CELL_LABEL = 'cell_numb'
-FOV_ID = 'fov_id'  # Changed from 'fov_ID' to match gem_screening output
+FOV_ID = 'fov_ID'  # Changed from 'fov_ID' to match gem_screening output
 CENTROID_X = 'centroid_x'
 CENTROID_Y = 'centroid_y'
 BEFORE_STIM = 'before_stim'
