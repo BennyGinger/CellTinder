@@ -14,6 +14,7 @@ from celltinder.guis.views.flame_view import FlameView
 # TODO: Add flexibility to this gui to allow users to visualize their analysises and select cells for display
 # TODO: Sort out the pytests
 # FIXME: Include parquet as an option for the data loader
+# TODO: Create an exit button that that could trigger a graceful shutdown within gem_screening for example
 class CellTinder(QMainWindow):
     """
     Main application window managing the histogram and cell image views.
