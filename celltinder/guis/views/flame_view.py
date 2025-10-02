@@ -1,14 +1,15 @@
 from __future__ import annotations
 from typing import Callable
 
+import numpy as np
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qt import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
-from matplotlib.backend_bases import MouseEvent
+from matplotlib.backend_bases import MouseEvent, Event
 from matplotlib.lines import Line2D
 
 
@@ -93,7 +94,9 @@ class DraggableLine:
         canvas.mpl_connect('button_release_event', self.on_release)
         canvas.mpl_connect('motion_notify_event', self.on_motion)
 
-    def on_press(self, event: MouseEvent) -> None:
+    def on_press(self, event: Event) -> None:
+        if not isinstance(event, MouseEvent):
+            return
         # ignore clicks outside the axes
         if event.inaxes != self.line.axes:
             return
@@ -104,26 +107,33 @@ class DraggableLine:
             return
         if not contains:
             return
-        x0 = self.line.get_xdata()[0]
+        xdata = self.line.get_xdata()
+        # Ensure xdata is at least 1-D so indexing is safe
+        xdata_arr = np.atleast_1d(xdata)
+        x0 = float(xdata_arr[0])
         self.press = (x0, event.xdata)
 
-    def on_motion(self, event: MouseEvent) -> None:
+    def on_motion(self, event: Event) -> None:
+        if not isinstance(event, MouseEvent):
+            return
         # ignore if not dragging, outside axes, or no xdata
         if (self.press is None or
             event.inaxes != self.line.axes or
             event.xdata is None):
             return
         x0, xpress = self.press
+        if event.xdata is None or xpress is None:
+            return
         dx = event.xdata - xpress
         newx = x0 + dx
         self.line.set_xdata([newx, newx])
         self.line.figure.canvas.draw_idle()
-        self.callback(newx)
-    
-    def on_release(self, _event: MouseEvent) -> None:
+    def on_release(self, _event: Event) -> None:
         """
         Release the line and reset the press attribute.
         """
+        self.press = None
+        self.press = None
         self.press = None
     
     def set_line(self, line: Line2D) -> None:
@@ -137,7 +147,7 @@ class GraphWidget(QWidget):
     """
     Widget that displays the matplotlib graph along with its navigation toolbar.
     """
-    def __init__(self, parent: QWidget=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.figure = Figure(figsize=FIG_SIZE, dpi=DPI)
         self.canvas = FigureCanvas(self.figure)
@@ -156,6 +166,7 @@ class GraphWidget(QWidget):
         self.draggable_upper = None
         self.on_lower_moved = None
         self.on_upper_moved = None
+        self.on_span_select = None
         
         # Set up the layout
         layout = QVBoxLayout(self)
@@ -183,10 +194,15 @@ class GraphWidget(QWidget):
         
         if self.draggable_lower is None:
             self.draggable_lower = DraggableLine(self.lower_line, lambda x: self.on_lower_moved(x) if self.on_lower_moved else None)
+        else:
+            if self.draggable_lower is not None:
+                self.draggable_lower.set_line(self.lower_line)
+
+        if self.draggable_upper is None:
             self.draggable_upper = DraggableLine(self.upper_line, lambda x: self.on_upper_moved(x) if self.on_upper_moved else None)
         else:
-            self.draggable_lower.set_line(self.lower_line)
-            self.draggable_upper.set_line(self.upper_line)
+            if self.draggable_upper is not None:
+                self.draggable_upper.set_line(self.upper_line)
         
         if self._span_rect is not None:
             self._span_rect.set_visible(False)
@@ -194,28 +210,37 @@ class GraphWidget(QWidget):
         
         ax.set_xlabel("Ratio")
         ax.set_ylabel("Count")
-        ax.set_title("Flame Filter - Intensity Ratio")
-        ax.set_yscale('log', base=10)
         self.canvas.draw()
-
-    def _on_span_press(self, event: MouseEvent) -> None:
+    def _on_span_press(self, event: Event) -> None:
         """
         Start the span selection on right-click in the axes.
         """
+        if not isinstance(event, MouseEvent):
+            return
         if event.inaxes is not self.ax or event.button != 3 or event.xdata is None:
             return
         self._span_start = event.xdata
         
         # make a new rectangle at y=axes bottom
         ymin, ymax = self.ax.get_ylim()
-        self._span_rect = Rectangle((self._span_start, ymin), 0, ymax - ymin, facecolor='yellow', alpha=0.3, edgecolor=None)
+        # Use an orange translucent rectangle to indicate selection
+        self._span_rect = Rectangle(
+            (self._span_start, ymin),
+            0,
+            ymax - ymin,
+            facecolor="#ffaa00",
+            alpha=0.3,
+            edgecolor=None,
+            zorder=3,
+        )
         self.ax.add_patch(self._span_rect)
         self.canvas.draw_idle()
-
-    def _on_span_motion(self, event: MouseEvent) -> None:
+    def _on_span_motion(self, event: Event) -> None:
         """
         Update the rectangle during the drag.
         """
+        if not isinstance(event, MouseEvent):
+            return
         if self._span_start is None or event.inaxes is not self.ax or event.xdata is None:
             return
         start = self._span_start
@@ -223,15 +248,18 @@ class GraphWidget(QWidget):
         
         # update rect x & width
         x0 = min(start, end)
-        w = abs(end - start)
-        self._span_rect.set_x(x0)
-        self._span_rect.set_width(w)
-        self.canvas.draw_idle()
-
-    def _on_span_release(self, event: MouseEvent) -> None:
+        width = abs(end - start)
+        if self._span_rect is not None:
+            self._span_rect.set_x(x0)
+            self._span_rect.set_width(width)
+            # Repaint during drag so the rectangle is visible while moving
+            self.canvas.draw_idle()
+    def _on_span_release(self, event: Event) -> None:
         """
         Finish the span selection on right-release in the same axes.
         """
+        if not isinstance(event, MouseEvent):
+            return
         if self._span_start is None or event.inaxes is not self.ax or event.button != 3 or event.xdata is None:
             return
         start = self._span_start
@@ -243,13 +271,19 @@ class GraphWidget(QWidget):
             self.on_span_select(low, high)
         # clean up
         self._span_start = None
+        if self._span_rect is not None:
+            self._span_rect.remove()
+            self._span_rect = None
+        self.canvas.draw_idle()
+        # clean up
+        self._span_start = None
         
         
 class ThresholdPanel(QWidget):
     """
     Widget that contains the threshold input controls and cell count display.
     """
-    def __init__(self, parent: QWidget=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QHBoxLayout(self)
 
@@ -321,7 +355,21 @@ class BottomBarWidget(QWidget):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.addStretch()
-        self.next_button = QPushButton("Find your cell-mate")
+        self.next_button = QPushButton("✅ Find your cell-mate")
+        self.next_button.setFixedSize(180, 40)
+        self.next_button.setStyleSheet("""
+            QPushButton {
+                background-color: #44aa44;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #338833;
+            }
+        """)
         layout.addWidget(self.next_button)
 
 

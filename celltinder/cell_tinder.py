@@ -1,8 +1,7 @@
 import sys
 from pathlib import Path
-from typing import Callable, Optional
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget, QVBoxLayout, QPushButton
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget, QVBoxLayout
 from PyQt6.QtCore import pyqtSignal
 
 from celltinder.backend.data_loader import DataLoader
@@ -45,16 +44,16 @@ class CellTinderWidget(QWidget):
         self.cell_view = None
         self.cell_crush = None
 
-        # Add Done button at the bottom
-        self.done_button = QPushButton("Done")
-        self.done_button.setStyleSheet("background-color: #44aa44; color: white; font-weight: bold;")
-        self.done_button.clicked.connect(self._on_done)
-        self._layout.addWidget(self.done_button)
+        # No quit button; host GUI controls lifecycle
 
     def show_cell_view_widget(self) -> None:
         self.flame_filter.on_next_pressed()
         self.cell_view = CellView(self.n_frames)
-        self.cell_crush = CellCrush(self.data_loader, self.cell_view)
+        # Provide callback so that pressing Process when embedded emits finished/quit
+        def _on_processed():
+            # Bubble up as a normal completion event
+            self.finished.emit()
+        self.cell_crush = CellCrush(self.data_loader, self.cell_view, on_processed=_on_processed)
         self.cell_view.backClicked.connect(self.show_histogram_widget)
         self.stack.addWidget(self.cell_view)
         self.stack.setCurrentWidget(self.cell_view)
@@ -71,10 +70,7 @@ class CellTinderWidget(QWidget):
         self.cell_view = None
         self.cell_crush = None
 
-    def _on_done(self):
-        self.finished.emit()
-
-    # No _decoration_delta needed for widget
+    # No quit handler; lifecycle controlled by host
 
     def show_cell_view(self) -> None:
         """

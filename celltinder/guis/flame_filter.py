@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from typing import Any, cast
 
 from PyQt6.QtWidgets import QApplication
 
@@ -32,14 +33,14 @@ class FlameFilter:
         self.view.next_button.clicked.connect(self.on_next_pressed)
         
         # Draw the initial plot
-        self.view.update_plot(displayed_lower, displayed_upper, self.model.ratios)
-
+        self.view.update_plot(displayed_lower, displayed_upper, self.model.ratios.tolist())
         # hook up the two drag callbacks:
-        self.view.graph_widget.on_lower_moved = self.on_lower_moved
-        self.view.graph_widget.on_upper_moved = self.on_upper_moved
+        gw = cast(Any, self.view.graph_widget)
+        gw.on_lower_moved = self.on_lower_moved
+        gw.on_upper_moved = self.on_upper_moved
         
         # hook up the span selector callback
-        self.view.graph_widget.on_span_select = self._on_span_selected
+        gw.on_span_select = self._on_span_selected
 
     def on_threshold_change(self) -> None:
         """
@@ -49,7 +50,7 @@ class FlameFilter:
         lower_val, upper_val = self.view.get_threshold_values(self.model.default_lower, self.model.default_upper)
         count = self.model.get_cell_count(lower_val, upper_val)
         self.view.update_count(count)
-        self.view.update_plot(lower_val, upper_val, self.model.ratios)
+        self.view.update_plot(lower_val, upper_val, self.model.ratios.tolist())
 
     def on_next_pressed(self) -> None:
         """

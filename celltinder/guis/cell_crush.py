@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import sys
+from typing import Any, cast
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPixmap, QImage
@@ -36,11 +37,13 @@ CUSTOM_CMAP = {'green': {'red': [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
                          'green': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)],
                          'blue': [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0)]}}
 
+from typing import Callable, Optional
+
 class CellCrush():
     """
     Controller for the Cell Crush GUI. It manages the interaction between the data and the view.
     """
-    def __init__(self, data_loader: DataLoader, view: CellView) -> None:
+    def __init__(self, data_loader: DataLoader, view: CellView, on_processed: Optional[Callable[[], None]] = None) -> None:
         
         self.data = data_loader
         self.data.add_process_col()
@@ -51,7 +54,8 @@ class CellCrush():
         
         # Setup view and connect signals...
         self.view = view
-        self.view.total_cells = len(self.df)
+        self._on_processed_callback = on_processed
+        # self.view.total_cells = len(self.df)
         self.view.top_bar.backClicked.connect(self.on_back_to_flame)
         self.view.previousCellClicked.connect(self.on_previous_cell)
         self.view.skipCellClicked.connect(self.on_reject_cell)
@@ -69,14 +73,17 @@ class CellCrush():
         
         # Set the initial size of the view.
         self.view.adjustSize()
-        
+
+        # Ensure overlay is applied on first render based on checkbox state
+        self.overlay_enabled = self.view.content_area.overlay_checkbox.isChecked()
+
         # Load the first cell using its index from the df.
         self._load_cell()
 
     def _init_shortcuts(self) -> None:
-        self._sc_manager = ShortcutManager(self)
+        self._sc_manager = ShortcutManager(cast(Any, self))
     
-    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int]:
+    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int, float, float]:
         """
         Gather information about the current cell.
         """
@@ -102,7 +109,8 @@ class CellCrush():
         """
         Mark or unmark the current cell, then refresh the icon/text.
         """
-        self.df.iat[self.current_idx, self.df.columns.get_loc(PROCESS)] = keep
+        row_label = self.df.index[self.current_idx]
+        self.df.at[row_label, PROCESS] = keep
         # Update the process column in the DataFrame and save it.
         self.data.update_cell_to_process_in_df(self.df)
         self.data.save_csv()
@@ -174,7 +182,7 @@ class CellCrush():
             A tuple containing the fig (Figure) and the ax (Axes) for the display.
         """
         fig = Figure(figsize=fig_size, dpi=dpi)
-        ax  = fig.add_axes([0, 0, 1, 1])
+        ax  = fig.add_axes((0.0, 0.0, 1.0, 1.0))
         # Hide axes
         ax.axis('off')
         return fig, ax
@@ -184,7 +192,11 @@ class CellCrush():
         Displays the 16-bit image on the provided axis using a custom colormap.
         """
         # Create a custom colormap.
-        cmap = LinearSegmentedColormap('GreenScale', segmentdata=CUSTOM_CMAP[CURRENT_COLOR], N=256)
+        # Ensure only the expected keys are passed to the colormap
+        from typing import Literal, Sequence, cast
+        allowed_keys = ('red', 'green', 'blue', 'alpha')
+        color_dict = {k: v for k, v in CUSTOM_CMAP[CURRENT_COLOR].items() if k in allowed_keys}
+        cmap = LinearSegmentedColormap('GreenScale', segmentdata=cast(dict[Literal['red', 'green', 'blue', 'alpha'], Sequence[tuple[float, ...]]], color_dict), N=256)
         
         # Display the image
         ax.imshow(img16, cmap=cmap, interpolation='bicubic',
@@ -297,13 +309,30 @@ class CellCrush():
 
     def on_process_cells(self) -> None:
         """
-        Handle the event when the process cells button is clicked. This will finalize the process by updating the cell to process in the DataFrame and saving the modify CSV. It will then close the view.
+        Handle the event when the process cells button is clicked. This will finalize the process by updating the cell to process in the DataFrame and saving the modify CSV. It will then close the view or quit the app if standalone.
         """
         # Finalize the process, for example saving the DataFrame.
         self.data.update_cell_to_process_in_df(self.df)
         self.data.save_csv()
-        # Shut down the GUI.
-        QApplication.instance().quit()
+        # If running as a standalone app, quit the app. If embedded, notify parent and/or close the view.
+        app_instance = QApplication.instance()
+        # Try to detect if running as a top-level window
+        parent = self.view.parent()
+        if parent is not None and parent.parent() is not None:
+            # Embedded: notify parent (CellTinderWidget) so it can emit finished and be cleared
+            if callable(self._on_processed_callback):
+                try:
+                    self._on_processed_callback()
+                except Exception:
+                    # Fallback to closing the view only
+                    self.view.close()
+            else:
+                # No callback provided, just close the view
+                self.view.close()
+        else:
+            # Standalone: quit the app
+            if app_instance is not None:
+                app_instance.quit()
 
     def on_back_to_flame(self) -> None:
         """

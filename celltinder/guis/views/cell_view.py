@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import cast
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPixmap, QIcon, QResizeEvent
@@ -74,16 +75,31 @@ class TopBar(BaseToolBar):
     backClicked = pyqtSignal()
     helpClicked = pyqtSignal()
 
-    def __init__(self, parent: QWidget=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__([("To Flame Filter", "back")], parent)
-        
         # remove the first stretch so the button hugs the left edge
         self._box.takeAt(0)
         self._box.addStretch()
         
-        self.back.clicked.disconnect()
-        self.back.clicked.connect(self.backClicked.emit)
-        
+        back_btn = cast(QPushButton, getattr(self, "back"))
+        back_btn.clicked.disconnect()
+        back_btn.clicked.connect(self.backClicked.emit)
+        # Style the 'To Flame Filter' button like Restart (autofocus), no icon
+        back_btn.setFixedSize(150, 40)
+        back_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffaa00;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #dd8800;
+            }
+        """)
+
         help_btn = QPushButton(self)
         help_btn.setIcon(QIcon.fromTheme("help-about"))    # or a local “?” pixmap
         help_btn.setToolTip("Show keyboard shortcuts")
@@ -103,14 +119,33 @@ class BottomBar(BaseToolBar):
     nextCellClicked = pyqtSignal()
     processCellsClicked = pyqtSignal()
 
-    def __init__(self, parent: QWidget=None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__([
             ("Previous", "previousCell"),
             ("Reject",   "skipCell"),
             ("Keep",     "keepCell"),
             ("Next",     "nextCell"),
-            ("Process",  "processCells")
+            ("Continue",  "processCells")
         ], parent)
+
+        # Style the Continue button to match autofocus_gui.py
+        btn = getattr(self, "processCells")
+        btn.setText("✅ Continue")
+        btn.setFixedSize(120, 40)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #44aa44;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #338833;
+            }
+        """)
+        btn.setDefault(True)
 
 
 class ContentAreaWidget(QWidget):
@@ -123,7 +158,7 @@ class ContentAreaWidget(QWidget):
     
     INDICATOR_STYLE = ("background:rgba(0,0,0,0);font-size:48px;color:{color};")
 
-    def __init__(self, n_frames: int, parent: QWidget=None) -> None:
+    def __init__(self, n_frames: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         # set the size policy to allow for dynamic resizing
         sp = self.sizePolicy()
@@ -133,12 +168,12 @@ class ContentAreaWidget(QWidget):
         
         self.n_frames = n_frames
         self.total_cells = 100  # Default; will be updated by the controller.
-        self.layout = QVBoxLayout(self)
+        self.main_layout = QVBoxLayout(self)
         
         # --- Title ---
         self.title_label = QLabel("Find your cell crush!")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(self.title_label)
+        self.main_layout.addWidget(self.title_label)
         
         # --- Info Panel ---
         self._init_info_panel()
@@ -215,7 +250,7 @@ class ContentAreaWidget(QWidget):
         info_layout.addLayout(selected_layout)
         info_layout.addStretch()
         
-        self.layout.addWidget(self.info_widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.main_layout.addWidget(self.info_widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def _init_cell_slider(self) -> None:
         """
@@ -227,7 +262,7 @@ class ContentAreaWidget(QWidget):
         # Emit a signal when the slider is released.
         self.cell_slider.sliderReleased.connect(lambda: self.cellSliderChanged.emit(self.cell_slider.value()))
         self.cell_slider_area.addWidget(self.cell_slider)
-        self.layout.addLayout(self.cell_slider_area)
+        self.main_layout.addLayout(self.cell_slider_area)
 
     def _init_image_display(self) -> None:
         """
@@ -239,7 +274,7 @@ class ContentAreaWidget(QWidget):
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_label.setScaledContents(False)   # we manually scale in _update_scaled_pixmap
-        self.layout.addWidget(self.image_label)
+        self.main_layout.addWidget(self.image_label)
         self.image_label.setMinimumSize(0, 0)
 
         # — the state indicator, as a child of the label —
@@ -257,7 +292,7 @@ class ContentAreaWidget(QWidget):
         Creates a checkbox for overlaying the mask on the image.
         """
         self.overlay_checkbox = QCheckBox("Overlay mask")
-        self.overlay_checkbox.setChecked(False)
+        self.overlay_checkbox.setChecked(True)
         self.overlay_checkbox.toggled.connect(lambda checked: self.overlayToggled.emit(checked))
         self.overlay_checkbox.setStyleSheet("""
                     QCheckBox::indicator {
@@ -305,7 +340,7 @@ class ContentAreaWidget(QWidget):
                 number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.slider_numbers_layout.addWidget(number_label)
         self.slider_area_layout.addLayout(self.slider_numbers_layout)
-        self.layout.addLayout(self.slider_area_layout)
+        self.main_layout.addLayout(self.slider_area_layout)
 
     def _on_cell_slider_value_changed(self, value: int) -> None:
         """
@@ -351,11 +386,11 @@ class ContentAreaWidget(QWidget):
         self._raw_pixmap = pixmap
         self._update_scaled_pixmap()
     
-    def resizeEvent(self, event: QResizeEvent) -> None:
+    def resizeEvent(self, a0: QResizeEvent | None) -> None:
         """
         Whenever our widget (and thus the label) resizes, rescale the pixmap.
         """
-        super().resizeEvent(event)
+        super().resizeEvent(a0)
         self._update_scaled_pixmap()
 
     def _update_scaled_pixmap(self) -> None:
@@ -395,17 +430,17 @@ class ContentAreaWidget(QWidget):
         cb.move(int(cb_x), int(cb_y))
         cb.raise_()
 
-    def heightForWidth(self, w: int) -> int:
+    def heightForWidth(self, a0: int) -> int:
         """
         Returns the height for a given width, maintaining the aspect ratio.
         This is used to ensure that the image label maintains its aspect ratio when resized.
         """
-        # Qt will ask you “if I have width=w, what height should I be?”
+        # Qt will ask you “if I have width=a0, what height should I be?”
         ar = getattr(self, "_aspect_ratio", None)
         if ar is not None and ar > 0:
-            return int(w / ar)
+            return int(a0 / ar)
         # fallback to default
-        return super().heightForWidth(w)
+        return super().heightForWidth(a0)
     
     def minimumSizeHint(self) -> QSize:
         """
