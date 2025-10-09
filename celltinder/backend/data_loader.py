@@ -71,35 +71,61 @@ class DataLoader:
     def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask') -> CellImageSet:
         """
         Load and crop all images or masks for a specific cell.
+        Supports both new CSV format (with path columns) and legacy format.
         
         Args:
             cell_idx: Index of the cell to load from the dataframe
-            img_label: Label of the image files
-            mask_label: Label of the mask files
+            img_label: Label of the image files (used for legacy format)
+            mask_label: Label of the mask files (used for legacy format)
         
         Returns:
-            CellArrays: A CellArrays object containing the loaded and cropped images and masks
+            CellImageSet: A CellImageSet object containing the loaded and cropped images and masks
         """
         # Get the positive cells
         pos_df = self.pos_df
         
         # Extract cell specific parameters
         cell_centroid: tuple[float, float] = tuple(pos_df[[CENTROID_Y, CENTROID_X]].iloc[cell_idx].values)
-        fov_id = pos_df[FOV_ID].iloc[cell_idx]
         cell_mask_value = pos_df[CELL_LABEL].iloc[cell_idx]
         
-        # Build img and mask directories
-        img_dir, mask_dir = self._build_image_mask_dirs(fov_id)
+        # Check if CSV has new format with path columns
+        img_cols = [col for col in pos_df.columns if col.endswith('_path') and 'img' in col]
+        mask_cols = [col for col in pos_df.columns if col.endswith('_path') and 'mask' in col]
         
-        # Build arrays file pre-paths (missing the frame number)
-        pre_img_path = img_dir.joinpath(f"{fov_id}_{img_label}.tif")
-        pre_mask_path = mask_dir.joinpath(f"{fov_id}_{mask_label}.tif")
+        if img_cols and mask_cols:
+            # New format: extract paths from CSV
+            img_paths = []
+            mask_paths = []
+            
+            # Extract paths for this cell
+            for col in img_cols:
+                path_value = pos_df[col].iloc[cell_idx]
+                if pd.notna(path_value):
+                    img_paths.append(Path(path_value))
+            
+            for col in mask_cols:
+                path_value = pos_df[col].iloc[cell_idx]
+                if pd.notna(path_value):
+                    mask_paths.append(Path(path_value))
+            
+            return CellImageSet(cell_centroid, img_paths, mask_paths, cell_mask_value, self.crop_size)
         
-        return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, self.n_frames, self.crop_size)
+        else:
+            # Legacy format: build paths from fov_id
+            fov_id = pos_df[FOV_ID].iloc[cell_idx]
+            
+            # Build img and mask directories
+            img_dir, mask_dir = self._build_image_mask_dirs(fov_id)
+            
+            # Build arrays file pre-paths (missing the frame number)
+            pre_img_path = img_dir.joinpath(f"{fov_id}_{img_label}.tif")
+            pre_mask_path = mask_dir.joinpath(f"{fov_id}_{mask_label}.tif")
+            
+            return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, self.n_frames, self.crop_size)
 
     def _build_image_mask_dirs(self, fov_id: str) -> tuple[Path, Path]:
         """
-        Build the image and mask directories based on the fov_id.
+        Build the image and mask directories based on the fov_id (legacy support).
         """
         # Build the folder names
         # Extract well ID from fov_id, handling both formats:
@@ -116,7 +142,7 @@ class DataLoader:
         img_path = project_path.joinpath(img_folder_name)
         mask_path = project_path.joinpath(mask_folder_name)
         return img_path, mask_path
-    
+
     def add_process_col(self) -> None:
         """Add a PROCESS column to the DataFrame."""
         
