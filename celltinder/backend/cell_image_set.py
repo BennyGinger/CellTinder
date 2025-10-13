@@ -48,8 +48,8 @@ class CellImageSet:
         """
         arrays: dict[int, np.ndarray] = {}
         for idx, file_path in enumerate(file_paths):
-            # Load and crop the array
-            arrays[idx] = self._crop_array(file_path, cell_centroid, box_size, cell_mask_value)
+            # Load and crop the array - use 1-based indexing to match legacy format
+            arrays[idx + 1] = self._crop_array(file_path, cell_centroid, box_size, cell_mask_value)
         return arrays
 
     def _loads_arrays_legacy(self, pre_file_path: Path, n_frames: int, box_size: int, cell_centroid: tuple[float, float], cell_mask_value: int | None = None) -> dict[int, np.ndarray]:

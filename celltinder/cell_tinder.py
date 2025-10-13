@@ -46,32 +46,6 @@ class CellTinderWidget(QWidget):
 
         # No quit button; host GUI controls lifecycle
 
-    def show_cell_view_widget(self) -> None:
-        self.flame_filter.on_next_pressed()
-        self.cell_view = CellView(self.n_frames)
-        # Provide callback so that pressing Process when embedded emits finished/quit
-        def _on_processed():
-            # Bubble up as a normal completion event
-            self.finished.emit()
-        self.cell_crush = CellCrush(self.data_loader, self.cell_view, on_processed=_on_processed)
-        self.cell_view.backClicked.connect(self.show_histogram_widget)
-        self.stack.addWidget(self.cell_view)
-        self.stack.setCurrentWidget(self.cell_view)
-
-    def show_histogram_widget(self) -> None:
-        self.stack.setCurrentWidget(self.flame_view)
-        if self.cell_view is not None:
-            idx = self.stack.indexOf(self.cell_view)
-            if idx != -1:
-                widget = self.stack.widget(idx)
-                self.stack.removeWidget(widget)
-                if widget is not None:
-                    widget.deleteLater()
-        self.cell_view = None
-        self.cell_crush = None
-
-    # No quit handler; lifecycle controlled by host
-
     def show_cell_view(self) -> None:
         """
         Handler for the 'Next' button. Applies current thresholds, creates the cell view,
@@ -82,7 +56,15 @@ class CellTinderWidget(QWidget):
 
         # Create and initialize cell view and controller
         self.cell_view = CellView(self.n_frames)
-        self.cell_crush = CellCrush(self.data_loader, self.cell_view)
+        
+        # Provide callback so that pressing Process when embedded emits finished/quit
+        def _on_processed():
+            # For standalone app, quit the application
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
+        
+        self.cell_crush = CellCrush(self.data_loader, self.cell_view, on_processed=_on_processed)
 
         # Connect back button to return to histogram
         self.cell_view.backClicked.connect(self.show_histogram)
