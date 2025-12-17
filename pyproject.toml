@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Benoit Roux", email = "benoit.roux@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "matplotlib>=3.10.1",
     "pandas>=2.2.3",
