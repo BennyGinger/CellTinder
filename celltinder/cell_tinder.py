@@ -128,5 +128,5 @@ def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> 
 
 if __name__ == "__main__":
     # Standalone usage for testing only
-    csv_path = Path("/media/ben/Analysis/Python/CellTinder/ImagesTest/A1/A1_cell_data.csv")
+    csv_path = Path("/media/ben/Analysis/Python/Repos/GEM_suite/CellTinder/ImagesTest/A1/A1_cell_data.csv")
     run_cell_tinder(csv_path)

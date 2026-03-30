@@ -20,6 +20,7 @@ from celltinder.guis.views.cell_view import CellView
 # Constants for figure size and DPI
 FIG_SIZE = (10, 10)  # inches
 DPI = 100  # dots per inch
+REFERENCE_FRAME = 1
 
 # Define the custom colormap: 
 CURRENT_COLOR = 'white'
@@ -89,11 +90,11 @@ class CellCrush():
         """
         if idx is None:
             idx = self.current_idx
-        ratio = self.df[RATIO].iat[idx]
-        processed = self.df[PROCESS].iat[idx]
+        ratio = cast(float, self.df[RATIO].iat[idx])
+        processed = cast(bool, self.df[PROCESS].iat[idx])
         selected_count = int(self.df[PROCESS].sum())
-        before = self.df[BEFORE_STIM].iat[idx]
-        after = self.df[AFTER_STIM].iat[idx]
+        before = cast(float, self.df[BEFORE_STIM].iat[idx])
+        after = cast(float, self.df[AFTER_STIM].iat[idx])
         return ratio, processed, selected_count, before, after
 
     def _refresh_info(self, *, preview: bool = False) -> None:
@@ -125,7 +126,17 @@ class CellCrush():
         cell_image_set = self.data.loads_arrays(self.current_idx)
         # Update the view with new cell info.
         self.current_cell = cell_image_set
+        self._cache_display_range()
         self._update_view()
+
+    def _cache_display_range(self) -> None:
+        """
+        Cache the display range from the reference frame so contrast stays fixed while stepping through frames.
+        """
+        reference_frame = REFERENCE_FRAME if REFERENCE_FRAME in self.current_cell.imgs else min(self.current_cell.imgs)
+        reference_image = self.current_cell.imgs[reference_frame]
+        self._display_vmin = float(np.min(reference_image))
+        self._display_vmax = float(np.max(reference_image))
         
     def _update_view(self) -> None:
         """
@@ -200,7 +211,7 @@ class CellCrush():
         
         # Display the image
         ax.imshow(img16, cmap=cmap, interpolation='bicubic',
-                  vmin=np.min(img16), vmax=np.max(img16))
+                  vmin=self._display_vmin, vmax=self._display_vmax)
     
     def _overlay_mask(self, ax: Axes, mask: np.ndarray) -> None:
         """
