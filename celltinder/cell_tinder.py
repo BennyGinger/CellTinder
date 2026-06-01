@@ -123,7 +123,7 @@ def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> 
     """
     app = QApplication(sys.argv)
     window = CellTinder(csv_path, n_frames, crop_size)
-    window.show()
+    window.showMaximized()
     app.exec()
 
 if __name__ == "__main__":

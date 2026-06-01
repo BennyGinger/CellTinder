@@ -12,7 +12,7 @@ from matplotlib.figure import Figure
 from scipy.ndimage import binary_dilation
 import numpy as np
 
-from celltinder.backend.data_loader import PROCESS, DataLoader, RATIO, BEFORE_STIM, AFTER_STIM
+from celltinder.backend.data_loader import PROCESS, DataLoader, RATIO, BEFORE_STIM, AFTER_STIM, F_MINUS_F0
 from celltinder.guis.utilities.shortcuts import ShortcutManager
 from celltinder.guis.views.cell_view import CellView
 
@@ -57,7 +57,7 @@ class CellCrush():
         self.view = view
         self._on_processed_callback = on_processed
         # self.view.total_cells = len(self.df)
-        self.view.top_bar.backClicked.connect(self.on_back_to_flame)
+        self.view.backClicked.connect(self.on_back_to_flame)
         self.view.previousCellClicked.connect(self.on_previous_cell)
         self.view.skipCellClicked.connect(self.on_reject_cell)
         self.view.keepCellClicked.connect(self.on_keep_cell)
@@ -84,7 +84,7 @@ class CellCrush():
     def _init_shortcuts(self) -> None:
         self._sc_manager = ShortcutManager(cast(Any, self))
     
-    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int, float, float]:
+    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int, float, float, float, str]:
         """
         Gather information about the current cell.
         """
@@ -95,7 +95,14 @@ class CellCrush():
         selected_count = int(self.df[PROCESS].sum())
         before = cast(float, self.df[BEFORE_STIM].iat[idx])
         after = cast(float, self.df[AFTER_STIM].iat[idx])
-        return ratio, processed, selected_count, before, after
+        ff0 = cast(float, self.df[F_MINUS_F0].iat[idx]) if F_MINUS_F0 in self.df.columns else float(after - before)
+        if 'cell_id' in self.df.columns:
+            cell_id = str(self.df['cell_id'].iat[idx])
+        elif 'CELL_ID' in self.df.columns:
+            cell_id = str(self.df['CELL_ID'].iat[idx])
+        else:
+            cell_id = str(self.df.index[idx])
+        return ratio, processed, selected_count, before, after, ff0, cell_id
 
     def _refresh_info(self, *, preview: bool = False) -> None:
         """
@@ -103,8 +110,19 @@ class CellCrush():
         Args:
             preview (bool): If True, updates the info without moving the slider.
         """
-        ratio, processed, selected_count, before, after = self._gather_info()
-        self.view.content_area.update_info(self.current_idx, self.total_cells, ratio, processed, selected_count, before, after, preview=preview)
+        ratio, processed, selected_count, before, after, ff0, cell_id = self._gather_info()
+        self.view.content_area.update_info(
+            self.current_idx,
+            self.total_cells,
+            ratio,
+            processed,
+            selected_count,
+            before,
+            after,
+            ff0,
+            cell_id,
+            preview=preview,
+        )
     
     def _mark_cell(self, keep: bool) -> None:
         """

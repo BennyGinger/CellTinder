@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSlider, QHBoxLayout, QPushButton, QLabel, QCheckBox, QSizePolicy
-from PyQt6.QtCore import pyqtSignal, Qt, QSize
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QResizeEvent
 
 from celltinder.guis.utilities.widgets_utilities import BaseToolBar
@@ -35,19 +35,17 @@ class CellView(QMainWindow):
         # Create and inject subwidgets.
         self.top_bar = TopBar()
         self.content_area = ContentAreaWidget(n_frames)
-        self.bottom_bar = BottomBar()
         
         self.main_layout.addWidget(self.top_bar)
         self.main_layout.addWidget(self.content_area, stretch=1)
-        self.main_layout.addWidget(self.bottom_bar)
         
         # Connect subwidget signals to the main view's signals.
-        self.top_bar.backClicked.connect(self.backClicked.emit)
-        self.bottom_bar.previousCellClicked.connect(self.previousCellClicked.emit)
-        self.bottom_bar.skipCellClicked.connect(self.skipCellClicked.emit)
-        self.bottom_bar.keepCellClicked.connect(self.keepCellClicked.emit)
-        self.bottom_bar.nextCellClicked.connect(self.nextCellClicked.emit)
-        self.bottom_bar.processCellsClicked.connect(self.processCellsClicked.emit)
+        self.content_area.backClicked.connect(self.backClicked.emit)
+        self.content_area.previousCellClicked.connect(self.previousCellClicked.emit)
+        self.content_area.skipCellClicked.connect(self.skipCellClicked.emit)
+        self.content_area.keepCellClicked.connect(self.keepCellClicked.emit)
+        self.content_area.nextCellClicked.connect(self.nextCellClicked.emit)
+        self.content_area.processCellsClicked.connect(self.processCellsClicked.emit)
         self.content_area.cellSliderChanged.connect(self.cellSliderChanged.emit)
         self.content_area.frameChanged.connect(self.frameChanged.emit)
         self.content_area.overlayToggled.connect(self.overlayToggled.emit)
@@ -76,36 +74,14 @@ class TopBar(BaseToolBar):
     helpClicked = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__([("To Flame Filter", "back")], parent)
-        # remove the first stretch so the button hugs the left edge
-        self._box.takeAt(0)
-        self._box.addStretch()
-        
-        back_btn = cast(QPushButton, getattr(self, "back"))
-        back_btn.clicked.disconnect()
-        back_btn.clicked.connect(self.backClicked.emit)
-        # Style the 'To Flame Filter' button like Restart (autofocus), no icon
-        back_btn.setFixedSize(150, 40)
-        back_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffaa00;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                font-size: 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #dd8800;
-            }
-        """)
+        super().__init__([], parent)
 
         help_btn = QPushButton(self)
-        help_btn.setIcon(QIcon.fromTheme("help-about"))    # or a local “?” pixmap
+        help_btn.setIcon(QIcon.fromTheme("help-about"))
         help_btn.setToolTip("Show keyboard shortcuts")
         help_btn.setFlat(True)
         help_btn.clicked.connect(self.helpClicked.emit)
-        self._box.addStretch()      # push it to the far right
+        self._box.addStretch()
         self._box.addWidget(help_btn)
 
 
@@ -155,6 +131,12 @@ class ContentAreaWidget(QWidget):
     cellSliderChanged = pyqtSignal(int)
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
+    backClicked = pyqtSignal()
+    previousCellClicked = pyqtSignal()
+    skipCellClicked = pyqtSignal()
+    keepCellClicked = pyqtSignal()
+    nextCellClicked = pyqtSignal()
+    processCellsClicked = pyqtSignal()
     
     INDICATOR_STYLE = ("background:rgba(0,0,0,0);font-size:48px;color:{color};")
 
@@ -169,26 +151,42 @@ class ContentAreaWidget(QWidget):
         self.n_frames = n_frames
         self.total_cells = 100  # Default; will be updated by the controller.
         self.main_layout = QVBoxLayout(self)
-        
-        # --- Title ---
+
+        # --- Horizontal split: left controls (1) | right display (2) ---
+        self.split_layout = QHBoxLayout()
+
+        # Right panel: cell slider + image + frame slider + nav buttons
+        self.right_panel = QWidget()
+        self.right_layout = QVBoxLayout(self.right_panel)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
+
+        # --- Title + info centered to the right/image panel ---
         self.title_label = QLabel("Find your cell crush!")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.main_layout.addWidget(self.title_label)
-        
-        # --- Info Panel ---
+        self.right_layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         self._init_info_panel()
-        
-        # --- Cell Slider ---
+
+        # Left panel: To Flame Filter button + Before / After / Ratio
+        self._init_left_panel()
+
+        # --- Cell Slider (right panel, top) ---
         self._init_cell_slider()
-        
+
         # --- Image Display Area ---
         self._init_image_display()
-        # ensure the label expands, but doesn’t itself stretch the pixmap:
         self.image_label.setScaledContents(False)
         self._raw_pixmap: QPixmap | None = None
-        
+
         # --- Frame Slider Area ---
         self._init_frame_slider_area()
+
+        # --- Navigation Buttons ---
+        self._init_nav_buttons()
+
+        self.split_layout.addWidget(self.right_panel)
+        self.split_layout.setStretch(0, 1)
+        self.split_layout.setStretch(1, 2)
+        self.main_layout.addLayout(self.split_layout)
 
     def _make_slider(self, maximum: int, *, ticks: bool=False) -> QSlider:
         """
@@ -209,27 +207,30 @@ class ContentAreaWidget(QWidget):
     
     def _init_info_panel(self) -> None:
         """
-        Builds the info panel to show cell number, ratio, and a selected cells counter.
+        Builds the info bar: cell number and selected cells counter.
+        Before / After / Ratio labels are created here for reuse but live in the left panel.
         """
         self.info_widget = QWidget()
         info_layout = QHBoxLayout(self.info_widget)
         info_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Create a label for the cell info.
+
+        # Cell position label.
         self.cell_info_label = QLabel("Cell ?/?")
         self.cell_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Create labels for before and after cell info.
+
+        # Create labels for before / after / ratio (will be placed in the left panel).
         self.before_label = QLabel("Before: ?")
         self.before_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.after_label  = QLabel("After:  ?")
+        self.after_label = QLabel("After:  ?")
         self.after_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Create a label for the cell ratio.
         self.cell_ratio_label = QLabel("Ratio: ?")
         self.cell_ratio_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Selected cells counter: dynamic value and static title.
+        self.ff0_label = QLabel("F-F0: ?")
+        self.ff0_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.cell_id_label = QLabel("cell_id: ?")
+        self.cell_id_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Selected cells counter.
         self.selected_cells_value_label = QLabel("0")
         self.selected_cells_value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.selected_cells_title_label = QLabel(" cells selected")
@@ -237,32 +238,57 @@ class ContentAreaWidget(QWidget):
         selected_layout = QHBoxLayout()
         selected_layout.addWidget(self.selected_cells_value_label)
         selected_layout.addWidget(self.selected_cells_title_label)
-        
+
         info_layout.addStretch()
         info_layout.addWidget(self.cell_info_label)
         info_layout.addSpacing(50)
-        info_layout.addWidget(self.before_label)
-        info_layout.addSpacing(50)
-        info_layout.addWidget(self.after_label)
-        info_layout.addSpacing(50)
-        info_layout.addWidget(self.cell_ratio_label)
-        info_layout.addSpacing(50)
         info_layout.addLayout(selected_layout)
         info_layout.addStretch()
-        
-        self.main_layout.addWidget(self.info_widget, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.right_layout.addWidget(self.info_widget, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+    def _init_left_panel(self) -> None:
+        """
+        Builds the left panel: 'To Flame Filter' button at top, then Before/After/Ratio labels.
+        """
+        self.left_panel = QWidget()
+        left_layout = QVBoxLayout(self.left_panel)
+
+        self.to_flame_filter_btn = QPushButton("To Flame Filter")
+        self.to_flame_filter_btn.setFixedSize(150, 40)
+        self.to_flame_filter_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffaa00;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #dd8800;
+            }
+        """)
+        self.to_flame_filter_btn.clicked.connect(self.backClicked.emit)
+
+        left_layout.addWidget(self.to_flame_filter_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+        left_layout.addStretch()
+        left_layout.addWidget(self.before_label)
+        left_layout.addWidget(self.after_label)
+        left_layout.addWidget(self.cell_ratio_label)
+        left_layout.addWidget(self.ff0_label)
+        left_layout.addWidget(self.cell_id_label)
+        left_layout.addStretch()
+        self.split_layout.addWidget(self.left_panel)
 
     def _init_cell_slider(self) -> None:
         """
-        Creates a horizontal slider for selecting cells.
+        Creates a horizontal slider for selecting cells (lives in the right panel).
         """
-        self.cell_slider_area = QVBoxLayout()
         self.cell_slider = self._make_slider(self.total_cells, ticks=False)
         self.cell_slider.valueChanged.connect(self._on_cell_slider_value_changed)
-        # Emit a signal when the slider is released.
         self.cell_slider.sliderReleased.connect(lambda: self.cellSliderChanged.emit(self.cell_slider.value()))
-        self.cell_slider_area.addWidget(self.cell_slider)
-        self.main_layout.addLayout(self.cell_slider_area)
+        self.right_layout.addWidget(self.cell_slider)
 
     def _init_image_display(self) -> None:
         """
@@ -274,7 +300,7 @@ class ContentAreaWidget(QWidget):
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.image_label.setScaledContents(False)   # we manually scale in _update_scaled_pixmap
-        self.main_layout.addWidget(self.image_label)
+        self.right_layout.addWidget(self.image_label, 1)
         self.image_label.setMinimumSize(0, 0)
 
         # — the state indicator, as a child of the label —
@@ -340,7 +366,47 @@ class ContentAreaWidget(QWidget):
                 number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.slider_numbers_layout.addWidget(number_label)
         self.slider_area_layout.addLayout(self.slider_numbers_layout)
-        self.main_layout.addLayout(self.slider_area_layout)
+        self.right_layout.addLayout(self.slider_area_layout)
+
+    def _init_nav_buttons(self) -> None:
+        """
+        Creates the five navigation/action buttons at the bottom of the right panel.
+        """
+        nav_layout = QHBoxLayout()
+        nav_layout.setContentsMargins(4, 4, 4, 4)
+        nav_layout.setSpacing(6)
+
+        btn_defs = [
+            ("Previous",     self.previousCellClicked),
+            ("Reject",       self.skipCellClicked),
+            ("Keep",         self.keepCellClicked),
+            ("Next",         self.nextCellClicked),
+        ]
+        for label, signal in btn_defs:
+            btn = QPushButton(label)
+            btn.clicked.connect(signal.emit)
+            nav_layout.addWidget(btn)
+
+        self.process_btn = QPushButton("✅ Continue")
+        self.process_btn.setFixedSize(120, 40)
+        self.process_btn.setDefault(True)
+        self.process_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #44aa44;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #338833;
+            }
+        """)
+        self.process_btn.clicked.connect(self.processCellsClicked.emit)
+        nav_layout.addWidget(self.process_btn)
+
+        self.right_layout.addLayout(nav_layout)
 
     def _on_cell_slider_value_changed(self, value: int) -> None:
         """
@@ -348,7 +414,20 @@ class ContentAreaWidget(QWidget):
         """
         self.cell_info_label.setText(f"Cell {value}/{self.total_cells}")
 
-    def update_info(self, cell_number: int, total_cells: int, cell_ratio: float, processed: bool, selected_count: int, before: float, after: float, *, preview: bool = False) -> None:
+    def update_info(
+        self,
+        cell_number: int,
+        total_cells: int,
+        cell_ratio: float,
+        processed: bool,
+        selected_count: int,
+        before: float,
+        after: float,
+        ff0: float,
+        cell_id: str,
+        *,
+        preview: bool = False,
+    ) -> None:
         """
         Updates the cell info displayed in the content area.
         Args:
@@ -366,6 +445,8 @@ class ContentAreaWidget(QWidget):
         self.before_label.setText(f"Before: {before:.2f}")
         self.after_label .setText(f"After:  {after:.2f}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
+        self.ff0_label.setText(f"F-F0: {ff0:.2f}")
+        self.cell_id_label.setText(f"cell_id: {cell_id}")
         self.selected_cells_value_label.setText(str(selected_count))
 
         self.state_indicator_label.setText("✓" if processed else "✗")
@@ -385,6 +466,8 @@ class ContentAreaWidget(QWidget):
         """
         self._raw_pixmap = pixmap
         self._update_scaled_pixmap()
+        # Ensure the very first render uses the final post-layout label size.
+        QTimer.singleShot(0, self._update_scaled_pixmap)
     
     def resizeEvent(self, a0: QResizeEvent | None) -> None:
         """

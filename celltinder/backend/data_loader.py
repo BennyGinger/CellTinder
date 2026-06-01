@@ -10,6 +10,11 @@ from celltinder.backend.cell_image_set import CellImageSet
 # FIXME: Modify the column names when calling the data, according to the changes in gem_screening
 # Define constants for column names
 RATIO = 'ratio'
+F_MINUS_F0 = 'F-F0'
+DF_LABEL = 'DF'
+F0 = 'before_stim'
+F0_LABEL = 'F0'
+VALID_CELL = 'valid_cell'
 CELL_LABEL = 'cell_numb'
 FOV_ID = 'fov_ID'  # Changed from 'fov_ID' to match gem_screening output
 CENTROID_X = 'centroid_x'
@@ -33,10 +38,14 @@ class DataLoader:
         self.df = pd.read_csv(csv_file)
         if 'Unnamed: 0' in self.df.columns:
             self.df.drop(columns=['Unnamed: 0'], inplace=True)
+        self.ensure_ff0_column()
         self.ratios = self.df[RATIO]
+        self.ff0 = self.df[F_MINUS_F0] if F_MINUS_F0 in self.df.columns else pd.Series(dtype=float)
         
         # Set default thresholds
-        self.load_threshold_bounds()
+        self.load_threshold_bounds(RATIO)
+        self.load_threshold_bounds(F_MINUS_F0)
+        self.load_threshold_bounds(F0)
 
     def filter_ratio(self, lower: float, upper: float, col_name: str = 'ratio') -> pd.DataFrame:
         """
@@ -50,17 +59,113 @@ class DataLoader:
         """
         return self.df[(self.df[col_name] >= lower) & (self.df[col_name] <= upper)]
 
-    def get_cell_count(self, lower: float, upper: float) -> int:
+    def get_cell_count(self, lower: float, upper: float, col_name: str = RATIO) -> int:
         """
         Get the cell count based on the lower and upper thresholds.
         Args:
             lower: Lower threshold
             upper: Upper threshold
+            col_name: Column name used for thresholding
         Returns:
             int: Number of cells within the thresholds
         """
-        filtered = self.filter_ratio(lower, upper)
+        filtered = self.filter_ratio(lower, upper, col_name=col_name)
         return len(filtered)
+
+    def get_metric_values(self, col_name: str) -> pd.Series:
+        """Return values for a metric column used in the histogram."""
+        return self.df[col_name]
+
+    def has_metric(self, col_name: str) -> bool:
+        """Return whether a metric column exists in the DataFrame."""
+        return col_name in self.df.columns
+
+    def get_default_bounds(self, col_name: str) -> tuple[float, float]:
+        """Return min and max defaults for a metric column."""
+        values = self.df[col_name]
+        return float(values.min()), float(values.max())
+
+    def threshold_column_name(self, metric: str, lower: float, upper: float) -> str:
+        """Build persisted threshold column names for each metric."""
+        if metric == RATIO:
+            return f"{lower:.2f}<ratio<{upper:.2f}"
+        if metric == F_MINUS_F0:
+            return f"{lower:.2f}<{DF_LABEL}<{upper:.2f}"
+        if metric == F0:
+            return f"{lower:.2f}<{F0_LABEL}<{upper:.2f}"
+        raise ValueError(f"Unsupported metric: {metric}")
+
+    def threshold_column_candidates(self, metric: str) -> list[str]:
+        """Return all threshold columns in the dataframe for a metric."""
+        if metric == RATIO:
+            return [c for c in self.df.columns if '<ratio<' in c or '< x <' in c]
+        if metric == F_MINUS_F0:
+            return [c for c in self.df.columns if f'<{DF_LABEL}<' in c]
+        if metric == F0:
+            return [c for c in self.df.columns if f'<{F0_LABEL}<' in c]
+        return []
+
+    def apply_thresholds(
+        self,
+        ratio_lower: float,
+        ratio_upper: float,
+        df_lower: float,
+        df_upper: float,
+        f0_lower: float,
+        f0_upper: float,
+        persist: bool = False,
+    ) -> int:
+        """
+        Create/update threshold columns and valid_cell using current bounds.
+        Returns the number of valid cells.
+        """
+        ratio_col = self.threshold_column_name(RATIO, ratio_lower, ratio_upper)
+        df_col = self.threshold_column_name(F_MINUS_F0, df_lower, df_upper)
+        f0_col = self.threshold_column_name(F0, f0_lower, f0_upper)
+
+        for col in self.threshold_column_candidates(RATIO):
+            if col != ratio_col:
+                self.df.drop(columns=[col], inplace=True)
+        for col in self.threshold_column_candidates(F_MINUS_F0):
+            if col != df_col:
+                self.df.drop(columns=[col], inplace=True)
+        for col in self.threshold_column_candidates(F0):
+            if col != f0_col:
+                self.df.drop(columns=[col], inplace=True)
+
+        self.df[ratio_col] = self.df[RATIO].apply(lambda x: ratio_lower < x < ratio_upper)
+
+        if self.has_metric(F_MINUS_F0):
+            self.df[df_col] = self.df[F_MINUS_F0].apply(lambda x: df_lower < x < df_upper)
+        else:
+            self.df[df_col] = False
+
+        if self.has_metric(F0):
+            self.df[f0_col] = self.df[F0].apply(lambda x: f0_lower < x < f0_upper)
+        else:
+            self.df[f0_col] = False
+
+        self.df[VALID_CELL] = self.df[ratio_col] & self.df[df_col] & self.df[f0_col]
+        self.ratio_threshold_col = ratio_col
+        self.df_threshold_col = df_col
+        self.f0_threshold_col = f0_col
+
+        if persist:
+            self.save_csv()
+
+        return int(self.df[VALID_CELL].sum())
+
+    def ensure_ff0_column(self) -> None:
+        """
+        Ensure the F-F0 column exists in the CSV and DataFrame.
+        F-F0 is computed as after_stim - before_stim.
+        """
+        if F_MINUS_F0 in self.df.columns:
+            return
+        if AFTER_STIM not in self.df.columns or BEFORE_STIM not in self.df.columns:
+            return
+        self.df[F_MINUS_F0] = self.df[AFTER_STIM] - self.df[BEFORE_STIM]
+        self.save_csv()
     
     def save_csv(self) -> None:
         """
@@ -154,27 +259,69 @@ class DataLoader:
         
         self.df.update(pos_df)
     
-    def load_threshold_bounds(self) -> tuple[float, float]:
+    def load_threshold_bounds(self, metric: str = RATIO) -> tuple[float, float]:
         """
-        Check if the DataFrame contains a threshold column that follows the pattern "float < x < float".
-        If found, extract the lower and upper bounds; otherwise, use default values.
+        Load threshold bounds from persisted threshold columns per metric.
+        Falls back to metric min/max when no matching threshold column is present.
         """
-        pattern = r"([\d\.]+)\s*<\s*x\s*<\s*([\d\.]+)"
-        cols = [c for c in self.df.columns if "< x <" in c]
+        if metric == RATIO:
+            pattern = r"([\d\.]+)\s*<\s*ratio\s*<\s*([\d\.]+)"
+            legacy_pattern = r"([\d\.]+)\s*<\s*x\s*<\s*([\d\.]+)"
+            cols = self.threshold_column_candidates(RATIO)
+            lower, upper = self.get_default_bounds(RATIO)
+            col_name = None
 
-        # start with the defaults
-        lower, upper = self.default_lower, self.default_upper
-        col_name = None
+            if cols:
+                col_name = cols[0]
+                m = re.match(pattern, col_name)
+                if m is None:
+                    m = re.match(legacy_pattern, col_name)
+                if m:
+                    lower, upper = float(m.group(1)), float(m.group(2))
 
-        if cols:
-            col_name = cols[0]
-            m = re.match(pattern, col_name)
-            if m:
-                lower, upper = float(m.group(1)), float(m.group(2))
+            self.lower, self.upper, self.column_thresholds = lower, upper, col_name
+            self.ratio_threshold_col = col_name
+            return lower, upper
 
-        # now set once
-        self.lower, self.upper, self.column_thresholds = lower, upper, col_name
-        return lower, upper
+        if metric == F_MINUS_F0 and self.has_metric(F_MINUS_F0):
+            pattern = rf"([\d\.]+)\s*<\s*{DF_LABEL}\s*<\s*([\d\.]+)"
+            cols = self.threshold_column_candidates(F_MINUS_F0)
+            lower, upper = self.get_default_bounds(F_MINUS_F0)
+            col_name = None
+
+            if cols:
+                col_name = cols[0]
+                m = re.match(pattern, col_name)
+                if m:
+                    lower, upper = float(m.group(1)), float(m.group(2))
+
+            self.df_lower, self.df_upper = lower, upper
+            self.df_threshold_col = col_name
+            return lower, upper
+
+        if metric == F_MINUS_F0:
+            return 0.0, 1.0
+
+        if metric == F0 and self.has_metric(F0):
+            pattern = rf"([\d\.]+)\s*<\s*{F0_LABEL}\s*<\s*([\d\.]+)"
+            cols = self.threshold_column_candidates(F0)
+            lower, upper = self.get_default_bounds(F0)
+            col_name = None
+
+            if cols:
+                col_name = cols[0]
+                m = re.match(pattern, col_name)
+                if m:
+                    lower, upper = float(m.group(1)), float(m.group(2))
+
+            self.f0_lower, self.f0_upper = lower, upper
+            self.f0_threshold_col = col_name
+            return lower, upper
+
+        if metric == F0:
+            return 0.0, 1.0
+
+        raise ValueError(f"Unsupported metric: {metric}")
     
     @property
     def default_lower(self) -> float:
@@ -189,6 +336,8 @@ class DataLoader:
     @property
     def pos_df(self) -> pd.DataFrame:
         """Return the DataFrame containing positive cells sorted by ratio."""
-        if self.column_thresholds is None:
-            raise ValueError("No threshold column found. Please set thresholds first.")
-        return self.df.loc[self.df[self.column_thresholds] == True].sort_values(by='ratio', ascending=False)
+        if VALID_CELL in self.df.columns:
+            return self.df.loc[self.df[VALID_CELL] == True].sort_values(by='ratio', ascending=False)
+        if hasattr(self, 'column_thresholds') and self.column_thresholds is not None:
+            return self.df.loc[self.df[self.column_thresholds] == True].sort_values(by='ratio', ascending=False)
+        raise ValueError("No valid_cell or threshold column found. Please set thresholds first.")

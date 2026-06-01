@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QCheckBox, QFrame
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -29,13 +29,33 @@ class FlameView(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.main_layout = QVBoxLayout(self.main_widget)
 
-        # Create and add the graph area (graph and toolbar)
-        self.graph_widget = GraphWidget()
-        self.main_layout.addWidget(self.graph_widget)
+        # Create a horizontal content split: controls on the left, display on the right.
+        self.content_layout = QHBoxLayout()
 
-        # Create and add the controls area (threshold inputs and cell count)
         self.controls_widget = ThresholdPanel()
-        self.main_layout.addWidget(self.controls_widget)
+        self.display_widget = QWidget()
+        self.display_layout = QVBoxLayout(self.display_widget)
+        self.graph_widget = GraphWidget()
+
+        self.count_widget = QWidget()
+        self.count_layout = QVBoxLayout(self.count_widget)
+        self.count_label = QLabel("Cell Count")
+        self.count_display = QLabel("0")
+        self.count_display.setFixedWidth(120)
+        self.count_display.setStyleSheet("font-weight: bold;")
+        self.count_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.count_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.count_layout.addWidget(self.count_display, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.display_layout.addWidget(self.graph_widget)
+        self.display_layout.addWidget(self.count_widget, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.content_layout.addWidget(self.controls_widget)
+        self.content_layout.addWidget(self.display_widget)
+        self.content_layout.setStretch(0, 1)
+        self.content_layout.setStretch(1, 2)
+
+        self.main_layout.addLayout(self.content_layout)
 
         # Create and add the bottom bar with the "Next" button
         self.bottom_bar = BottomBarWidget()
@@ -45,33 +65,49 @@ class FlameView(QMainWindow):
         """
         Delegate plot updating to the GraphWidget.
         """
-        self.graph_widget.update_plot(lower_val, upper_val, ratios)
+        self.graph_widget.update_plot(lower_val, upper_val, ratios, x_label=self.active_metric_label())
+
+    def clear_plot(self) -> None:
+        """
+        Delegate plot clearing to the GraphWidget.
+        """
+        self.graph_widget.clear_plot()
 
     def update_count(self, count: int) -> None:
         """
-        Delegate count update to the ControlsWidget.
+        Update the centered count display under the graph.
         """
-        self.controls_widget.update_count(count)
+        self.count_display.setText(str(count))
 
-    def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
+    def get_threshold_values(self, metric: str, default_lower: float, default_upper: float) -> tuple[float, float]:
         """
-        Delegate threshold value retrieval to the ControlsWidget.
+        Delegate threshold value retrieval to the metric-specific controls.
         """
-        return self.controls_widget.get_threshold_values(default_lower, default_upper)
+        return self.controls_widget.get_threshold_values(metric, default_lower, default_upper)
+
+    def active_metric_label(self) -> str:
+        """
+        Return label of the currently active metric for x-axis display.
+        """
+        if self.ff0_checkbox.isChecked():
+            return "F-F0"
+        if self.f0_checkbox.isChecked():
+            return "F0"
+        return "Ratio"
     
     @property
     def lower_edit(self) -> QLineEdit:
         """
-        Property to access the lower threshold QLineEdit.
+        Property to access the ratio lower threshold QLineEdit.
         """
-        return self.controls_widget.lower_edit
+        return self.controls_widget.ratio_lower_edit
     
     @property
     def upper_edit(self) -> QLineEdit:
         """
-        Property to access the upper threshold QLineEdit.
+        Property to access the ratio upper threshold QLineEdit.
         """
-        return self.controls_widget.upper_edit
+        return self.controls_widget.ratio_upper_edit
     
     @property
     def next_button(self) -> QPushButton:
@@ -79,6 +115,55 @@ class FlameView(QMainWindow):
         Property to access the "Next" button.
         """
         return self.bottom_bar.next_button
+
+    @property
+    def ratio_checkbox(self) -> QCheckBox:
+        """
+        Property to access the ratio display checkbox.
+        """
+        return self.controls_widget.ratio_checkbox
+
+    @property
+    def ff0_checkbox(self) -> QCheckBox:
+        """
+        Property to access the F-F0 display checkbox.
+        """
+        return self.controls_widget.ff0_checkbox
+
+    @property
+    def f0_checkbox(self) -> QCheckBox:
+        """
+        Property to access the F0 display checkbox.
+        """
+        return self.controls_widget.f0_checkbox
+
+    @property
+    def ff0_lower_edit(self) -> QLineEdit:
+        """
+        Property to access the F-F0 lower threshold QLineEdit.
+        """
+        return self.controls_widget.ff0_lower_edit
+
+    @property
+    def ff0_upper_edit(self) -> QLineEdit:
+        """
+        Property to access the F-F0 upper threshold QLineEdit.
+        """
+        return self.controls_widget.ff0_upper_edit
+
+    @property
+    def f0_lower_edit(self) -> QLineEdit:
+        """
+        Property to access the F0 lower threshold QLineEdit.
+        """
+        return self.controls_widget.f0_lower_edit
+
+    @property
+    def f0_upper_edit(self) -> QLineEdit:
+        """
+        Property to access the F0 upper threshold QLineEdit.
+        """
+        return self.controls_widget.f0_upper_edit
 
 
 class DraggableLine:
@@ -132,6 +217,10 @@ class DraggableLine:
         """
         Release the line and reset the press attribute.
         """
+        if self.press is not None:
+            xdata = np.atleast_1d(self.line.get_xdata())
+            if xdata.size > 0 and self.callback is not None:
+                self.callback(float(xdata[0]))
         self.press = None
         self.press = None
         self.press = None
@@ -179,7 +268,7 @@ class GraphWidget(QWidget):
         toolbar_layout.addStretch()
         layout.addLayout(toolbar_layout)
 
-    def update_plot(self, lower_val: float, upper_val: float, ratios: list) -> None:
+    def update_plot(self, lower_val: float, upper_val: float, ratios: list, x_label: str = "Ratio") -> None:
         """
         Update the histogram plot with new threshold values.
         """
@@ -208,14 +297,32 @@ class GraphWidget(QWidget):
             self._span_rect.set_visible(False)
             self._span_rect = None
         
-        ax.set_xlabel("Ratio")
+        ax.set_xlabel(x_label)
         ax.set_ylabel("Count")
         self.canvas.draw()
+
+    def clear_plot(self) -> None:
+        """
+        Clear the graph area so no ratio histogram is displayed.
+        """
+        self.figure.clear()
+        self.canvas.draw()
+
+        # Existing draggable lines are no longer valid when the figure is cleared.
+        self.draggable_lower = None
+        self.draggable_upper = None
+        self._span_start = None
+        self._span_rect = None
+        if hasattr(self, "ax"):
+            del self.ax
+
     def _on_span_press(self, event: Event) -> None:
         """
         Start the span selection on right-click in the axes.
         """
         if not isinstance(event, MouseEvent):
+            return
+        if not hasattr(self, "ax"):
             return
         if event.inaxes is not self.ax or event.button != 3 or event.xdata is None:
             return
@@ -241,6 +348,8 @@ class GraphWidget(QWidget):
         """
         if not isinstance(event, MouseEvent):
             return
+        if not hasattr(self, "ax"):
+            return
         if self._span_start is None or event.inaxes is not self.ax or event.xdata is None:
             return
         start = self._span_start
@@ -259,6 +368,8 @@ class GraphWidget(QWidget):
         Finish the span selection on right-release in the same axes.
         """
         if not isinstance(event, MouseEvent):
+            return
+        if not hasattr(self, "ax"):
             return
         if self._span_start is None or event.inaxes is not self.ax or event.button != 3 or event.xdata is None:
             return
@@ -285,26 +396,53 @@ class ThresholdPanel(QWidget):
     """
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
 
-        # Lower and Upper Threshold Inputs
-        self.lower_label, self.lower_edit, lower_layout = self._create_threshold_input("Lower Threshold", "red")
-        self.upper_label, self.upper_edit, upper_layout = self._create_threshold_input("Upper Threshold", "green")
+        # Ratio controls
+        self.ratio_checkbox = QCheckBox("ratio")
+        self.ratio_checkbox.setChecked(True)
+        layout.addWidget(self.ratio_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Cell Count Display
-        count_layout = QVBoxLayout()
-        self.count_label = QLabel("Cell Count")
-        self.count_display = QLabel("0")
-        self.count_display.setFixedWidth(120)
-        self.count_display.setStyleSheet("font-weight: bold;")
-        self.count_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        count_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        count_layout.addWidget(self.count_display, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.ratio_lower_label, self.ratio_lower_edit, ratio_lower_layout = self._create_threshold_input("Lower Threshold", "red")
+        self.ratio_upper_label, self.ratio_upper_edit, ratio_upper_layout = self._create_threshold_input("Upper Threshold", "green")
+        layout.addLayout(ratio_lower_layout)
+        layout.addLayout(ratio_upper_layout)
 
-        # Combine the three sublayouts into a single controls layout
-        layout.addLayout(lower_layout)
-        layout.addLayout(upper_layout)
-        layout.addLayout(count_layout)
+        # Black divider line between metric sections
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFrameShadow(QFrame.Shadow.Plain)
+        divider.setStyleSheet("color: black;")
+        layout.addWidget(divider)
+
+        # F-F0 controls
+        self.ff0_checkbox = QCheckBox("F-F0")
+        self.ff0_checkbox.setChecked(False)
+        layout.addWidget(self.ff0_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.ff0_lower_label, self.ff0_lower_edit, ff0_lower_layout = self._create_threshold_input("Lower Threshold", "red")
+        self.ff0_upper_label, self.ff0_upper_edit, ff0_upper_layout = self._create_threshold_input("Upper Threshold", "green")
+        layout.addLayout(ff0_lower_layout)
+        layout.addLayout(ff0_upper_layout)
+
+        # Black divider before F0 section
+        divider2 = QFrame()
+        divider2.setFrameShape(QFrame.Shape.HLine)
+        divider2.setFrameShadow(QFrame.Shadow.Plain)
+        divider2.setStyleSheet("color: black;")
+        layout.addWidget(divider2)
+
+        # F0 controls
+        self.f0_checkbox = QCheckBox("F0")
+        self.f0_checkbox.setChecked(False)
+        layout.addWidget(self.f0_checkbox, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.f0_lower_label, self.f0_lower_edit, f0_lower_layout = self._create_threshold_input("Lower Threshold", "red")
+        self.f0_upper_label, self.f0_upper_edit, f0_upper_layout = self._create_threshold_input("Upper Threshold", "green")
+        layout.addLayout(f0_lower_layout)
+        layout.addLayout(f0_upper_layout)
+
+        layout.addStretch()
 
     def _create_threshold_input(self, text: str, color: str) -> tuple[QLabel, QLineEdit, QVBoxLayout]:
         """
@@ -320,30 +458,34 @@ class ThresholdPanel(QWidget):
         sub.addWidget(edt, alignment=Qt.AlignmentFlag.AlignCenter)
         return lbl, edt, sub
     
-    def update_count(self, count: int) -> None:
+    def get_threshold_values(self, metric: str, default_lower: float, default_upper: float) -> tuple[float, float]:
         """
-        Update the cell count display.
+        Extract and validate threshold values from metric-specific input fields.
         """
-        self.count_display.setText(str(count))
+        if metric == "F-F0":
+            lower_edit = self.ff0_lower_edit
+            upper_edit = self.ff0_upper_edit
+        elif metric == "before_stim":
+            lower_edit = self.f0_lower_edit
+            upper_edit = self.f0_upper_edit
+        else:
+            lower_edit = self.ratio_lower_edit
+            upper_edit = self.ratio_upper_edit
 
-    def get_threshold_values(self, default_lower: float, default_upper: float) -> tuple[float, float]:
-        """
-        Extract and validate threshold values from the input fields.
-        """
         try:
-            lower_val = float(self.lower_edit.text())
+            lower_val = float(lower_edit.text())
         except ValueError:
             lower_val = round(default_lower, 2)
-            self.lower_edit.setText(str(lower_val))
+            lower_edit.setText(str(lower_val))
         try:
-            upper_val = float(self.upper_edit.text())
+            upper_val = float(upper_edit.text())
         except ValueError:
             upper_val = round(default_upper, 2)
-            self.upper_edit.setText(str(upper_val))
+            upper_edit.setText(str(upper_val))
 
         if lower_val >= upper_val:
             upper_val = lower_val + 0.01
-            self.upper_edit.setText(str(round(upper_val, 2)))
+            upper_edit.setText(str(round(upper_val, 2)))
         return lower_val, upper_val
 
 
