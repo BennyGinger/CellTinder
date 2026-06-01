@@ -6,6 +6,7 @@ from PyQt6.QtCore import pyqtSignal
 
 from celltinder.backend.data_loader import DataLoader
 from celltinder.guis.flame_filter import FlameFilter
+from celltinder.guis.csv_path_dialog import prompt_for_csv_path
 from celltinder.guis.views.cell_view import CellView
 from celltinder.guis.cell_crush import CellCrush
 from celltinder.guis.views.flame_view import FlameView
@@ -117,11 +118,19 @@ class CellTinder(QMainWindow):
         self.widget = CellTinderWidget(csv_path, n_frames, crop_size)
         self.setCentralWidget(self.widget)
 
-def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> None:
+
+def run_cell_tinder(csv_path: Path | None = None, n_frames: int = 2, crop_size: int = 151) -> None:
     """
     Run the CellTinder application (standalone window).
     """
     app = QApplication(sys.argv)
+    if csv_path is None:
+        selected = prompt_for_csv_path(n_frames=n_frames, crop_size=crop_size)
+        if selected is None:
+            return
+        csv_path, n_frames, crop_size = selected
+        if csv_path is None:
+            return
     window = CellTinder(csv_path, n_frames, crop_size)
     window.showMaximized()
     app.exec()
@@ -129,4 +138,5 @@ def run_cell_tinder(csv_path: Path, n_frames: int = 2, crop_size: int = 151) -> 
 if __name__ == "__main__":
     # Standalone usage for testing only
     csv_path = Path("/media/ben/Analysis/Python/Repos/GEM_suite/CellTinder/ImagesTest/A1/A1_cell_data.csv")
+    # csv_path = None  # Set to None to prompt for path
     run_cell_tinder(csv_path)
