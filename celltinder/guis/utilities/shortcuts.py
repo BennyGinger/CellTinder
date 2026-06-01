@@ -16,6 +16,7 @@ class Shortcuts(Enum):
     REJECT_CELL    = ("r", "Reject cell",           "on_reject_cell")
     TOGGLE_OVERLAY = ("m", "Toggle overlay mask",   "_toggle_overlay")
     NEXT_FRAME     = ("8", "Advance frame",         "_bump_frame")
+    TOGGLE_SOURCE  = ("9", "Toggle measure/refseg", "_toggle_image_source")
 
     def __init__(self, key: str, desc: str, method_name: str):
         self._key = key
@@ -48,6 +49,7 @@ class ShortcutController(Protocol):
     def on_reject_cell(self)    -> None: ...
     def _toggle_overlay(self)   -> None: ...
     def _bump_frame(self)       -> None: ...
+    def _toggle_image_source(self) -> None: ...
 
 
 class ShortcutManager:

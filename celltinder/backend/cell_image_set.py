@@ -7,7 +7,7 @@ import numpy as np
 class CellImageSet:
     """ Class to load and crop all images and masks from a specific cell."""
     
-    def __init__(self, cell_centroid: tuple[float, float], img_data: list[Path] | Path, mask_data: list[Path] | Path, cell_mask_value: int, box_size_or_frames: int, box_size: int | None = None) -> None:
+    def __init__(self, cell_centroid: tuple[float, float], img_data: list[Path] | Path, mask_data: list[Path] | Path, refseg_data: list[Path] | Path, cell_mask_value: int, box_size_or_frames: int, box_size: int | None = None) -> None:
         """Initialize the CellImageSet object with the paths to the images and masks. 
         Supports both new format (lists of paths) and legacy format (pre-paths with frame numbers).
         
@@ -20,10 +20,14 @@ class CellImageSet:
             box_size: Box size (legacy format only, when box_size_or_frames is n_frames)
         """
         
-        if isinstance(img_data, list) and isinstance(mask_data, list):
+        if isinstance(img_data, list) and isinstance(mask_data, list) and isinstance(refseg_data, list):
             # New format: lists of paths
             self.imgs = self._loads_arrays(img_data, cell_centroid, box_size_or_frames)
             self.masks = self._loads_arrays(mask_data, cell_centroid, box_size_or_frames, cell_mask_value)
+            if refseg_data:
+                self.refsegs = self._loads_arrays(refseg_data, cell_centroid, box_size_or_frames)
+            else:
+                self.refsegs = self.imgs
         else:
             # Legacy format: pre-paths with frame numbers
             if box_size is None:
@@ -32,8 +36,13 @@ class CellImageSet:
             # Type assertion since we know these are Path objects in the else branch
             assert isinstance(img_data, Path), "Expected Path for legacy format"
             assert isinstance(mask_data, Path), "Expected Path for legacy format"
+            assert isinstance(refseg_data, Path), "Expected Path for legacy format"
             self.imgs = self._loads_arrays_legacy(img_data, n_frames, box_size, cell_centroid)
             self.masks = self._loads_arrays_legacy(mask_data, n_frames, box_size, cell_centroid, cell_mask_value)
+            try:
+                self.refsegs = self._loads_arrays_legacy(refseg_data, n_frames, box_size, cell_centroid)
+            except FileNotFoundError:
+                self.refsegs = self.imgs
         
     def _loads_arrays(self, file_paths: list[Path], cell_centroid: tuple[float, float], box_size: int, cell_mask_value: int | None = None) -> dict[int, np.ndarray]:
         """Load and crop all images or masks from a list of file paths.

@@ -65,6 +65,7 @@ class CellCrush():
         self.view.processCellsClicked.connect(self.on_process_cells)
         self.view.frameChanged.connect(self.on_frame_changed)
         self.view.overlayToggled.connect(self.on_overlay_toggled)
+        self.view.imageSourceChanged.connect(self.on_image_source_changed)
         self.view.cellSliderChanged.connect(self.on_cell_slider_changed)
         self.view.cell_slider.valueChanged.connect(self.on_cell_slider_value_preview)
         
@@ -77,6 +78,7 @@ class CellCrush():
 
         # Ensure overlay is applied on first render based on checkbox state
         self.overlay_enabled = self.view.content_area.overlay_checkbox.isChecked()
+        self.image_source = 'measure'
 
         # Load the first cell using its index from the df.
         self._load_cell()
@@ -151,8 +153,9 @@ class CellCrush():
         """
         Cache the display range from the reference frame so contrast stays fixed while stepping through frames.
         """
-        reference_frame = REFERENCE_FRAME if REFERENCE_FRAME in self.current_cell.imgs else min(self.current_cell.imgs)
-        reference_image = self.current_cell.imgs[reference_frame]
+        img_dict = self.current_cell.imgs if self.image_source == 'measure' else self.current_cell.refsegs
+        reference_frame = REFERENCE_FRAME if REFERENCE_FRAME in img_dict else min(img_dict)
+        reference_image = img_dict[reference_frame]
         self._display_vmin = float(np.min(reference_image))
         self._display_vmax = float(np.max(reference_image))
         
@@ -193,7 +196,8 @@ class CellCrush():
             img16 (np.ndarray): The 16-bit image.
             mask (np.ndarray or None): The mask if overlay is enabled, otherwise None.
         """
-        img16 = self.current_cell.imgs[self.current_frame]
+        image_map = self.current_cell.imgs if self.image_source == 'measure' else self.current_cell.refsegs
+        img16 = image_map[self.current_frame]
         mask = None
         if getattr(self, "overlay_enabled", False):
             mask = self.current_cell.masks[self.current_frame]
@@ -280,6 +284,14 @@ class CellCrush():
         Toggles the overlay checkbox in the view.
         """
         self.view.content_area.overlay_checkbox.toggle()
+
+    def _toggle_image_source(self) -> None:
+        """Toggle displayed image source between measure and refseg."""
+        source_widget = self.view.content_area
+        if source_widget.measure_checkbox.isChecked():
+            source_widget.refseg_checkbox.setChecked(True)
+        else:
+            source_widget.measure_checkbox.setChecked(True)
     
     # --------- Event handlers for the view signals -----------------
     def on_frame_changed(self, frame: int) -> None:
@@ -294,6 +306,12 @@ class CellCrush():
         Handle the event when the overlay checkbox is toggled. Update the overlay status and refresh the image.
         """
         self.overlay_enabled = enabled
+        self._update_image()
+
+    def on_image_source_changed(self, source: str) -> None:
+        """Switch between measure and refseg image display sources."""
+        self.image_source = source
+        self._cache_display_range()
         self._update_image()
     
     def on_previous_cell(self) -> None:

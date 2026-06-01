@@ -22,6 +22,7 @@ class CellView(QMainWindow):
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
     cellSliderChanged = pyqtSignal(int)
+    imageSourceChanged = pyqtSignal(str)
     
     def __init__(self, n_frames: int) -> None:
         super().__init__()
@@ -49,6 +50,7 @@ class CellView(QMainWindow):
         self.content_area.cellSliderChanged.connect(self.cellSliderChanged.emit)
         self.content_area.frameChanged.connect(self.frameChanged.emit)
         self.content_area.overlayToggled.connect(self.overlayToggled.emit)
+        self.content_area.imageSourceChanged.connect(self.imageSourceChanged.emit)
         
     def setImage(self, pixmap: QPixmap) -> None:
         """
@@ -131,6 +133,7 @@ class ContentAreaWidget(QWidget):
     cellSliderChanged = pyqtSignal(int)
     frameChanged = pyqtSignal(int)
     overlayToggled = pyqtSignal(bool)
+    imageSourceChanged = pyqtSignal(str)
     backClicked = pyqtSignal()
     previousCellClicked = pyqtSignal()
     skipCellClicked = pyqtSignal()
@@ -313,6 +316,13 @@ class ContentAreaWidget(QWidget):
         self.overlay_checkbox.setParent(self.image_label)
         self.overlay_checkbox.show()
 
+        # Source selector on the right side of the displayed image.
+        self._init_image_source_checkboxes()
+        self.measure_checkbox.setParent(self.image_label)
+        self.refseg_checkbox.setParent(self.image_label)
+        self.measure_checkbox.show()
+        self.refseg_checkbox.show()
+
     def _init_overlay_checkbox(self) -> None:
         """
         Creates a checkbox for overlaying the mask on the image.
@@ -340,6 +350,46 @@ class ContentAreaWidget(QWidget):
                         spacing: 6px;
                         margin-bottom: 20px;
                     }""")
+
+    def _init_image_source_checkboxes(self) -> None:
+        """Create exclusive source selection checkboxes for measure/refseg."""
+        self.measure_checkbox = QCheckBox("measure")
+        self.refseg_checkbox = QCheckBox("refseg")
+
+        self.measure_checkbox.setChecked(True)
+        self.measure_checkbox.setStyleSheet(self.overlay_checkbox.styleSheet())
+        self.refseg_checkbox.setStyleSheet(self.overlay_checkbox.styleSheet())
+
+        self.measure_checkbox.toggled.connect(self._on_measure_toggled)
+        self.refseg_checkbox.toggled.connect(self._on_refseg_toggled)
+
+    def _on_measure_toggled(self, checked: bool) -> None:
+        """Keep source selection exclusive and emit selected source."""
+        if checked:
+            self.refseg_checkbox.blockSignals(True)
+            self.refseg_checkbox.setChecked(False)
+            self.refseg_checkbox.blockSignals(False)
+            self.imageSourceChanged.emit("measure")
+            return
+
+        if not self.refseg_checkbox.isChecked():
+            self.measure_checkbox.blockSignals(True)
+            self.measure_checkbox.setChecked(True)
+            self.measure_checkbox.blockSignals(False)
+
+    def _on_refseg_toggled(self, checked: bool) -> None:
+        """Keep source selection exclusive and emit selected source."""
+        if checked:
+            self.measure_checkbox.blockSignals(True)
+            self.measure_checkbox.setChecked(False)
+            self.measure_checkbox.blockSignals(False)
+            self.imageSourceChanged.emit("refseg")
+            return
+
+        if not self.measure_checkbox.isChecked():
+            self.refseg_checkbox.blockSignals(True)
+            self.refseg_checkbox.setChecked(True)
+            self.refseg_checkbox.blockSignals(False)
         
     def _init_frame_slider_area(self) -> None:
         """
@@ -512,6 +562,21 @@ class ContentAreaWidget(QWidget):
         cb_y = y0 + pix_h - h_cb - margin
         cb.move(int(cb_x), int(cb_y))
         cb.raise_()
+
+        # --- move measure/refseg selectors to right side, vertically centered ---
+        measure_cb = self.measure_checkbox
+        refseg_cb = self.refseg_checkbox
+        measure_cb.adjustSize()
+        refseg_cb.adjustSize()
+        source_spacing = 8
+        source_max_w = max(measure_cb.width(), refseg_cb.width())
+        stack_height = measure_cb.height() + source_spacing + refseg_cb.height()
+        source_x = x0 + pix_w - source_max_w - margin
+        start_y = y0 + (pix_h - stack_height) / 2
+        measure_cb.move(int(source_x), int(start_y))
+        refseg_cb.move(int(source_x), int(start_y + measure_cb.height() + source_spacing))
+        measure_cb.raise_()
+        refseg_cb.raise_()
 
     def heightForWidth(self, a0: int) -> int:
         """

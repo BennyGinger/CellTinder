@@ -22,6 +22,7 @@ CENTROID_Y = 'centroid_y'
 BEFORE_STIM = 'before_stim'
 AFTER_STIM = 'after_stim'
 PROCESS = 'process'
+TIFF_SUFFIXES = ('.tif', '.tiff')
 
 class DataLoader:
     """
@@ -35,6 +36,7 @@ class DataLoader:
         self.crop_size = crop_size
         
         self.csv_path: Path = csv_file
+        self._tiff_path_cache: dict[tuple[str, str], list[Path]] = {}
         self.df = pd.read_csv(csv_file)
         if 'Unnamed: 0' in self.df.columns:
             self.df.drop(columns=['Unnamed: 0'], inplace=True)
@@ -173,7 +175,7 @@ class DataLoader:
         """
         self.df.to_csv(self.csv_path, index=False)
 
-    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask') -> CellImageSet:
+    def loads_arrays(self, cell_idx: int, img_label: str = 'measure', mask_label: str = 'mask', refseg_label: str = 'refseg') -> CellImageSet:
         """
         Load and crop all images or masks for a specific cell.
         Supports both new CSV format (with path columns) and legacy format.
@@ -194,12 +196,15 @@ class DataLoader:
         cell_mask_value = pos_df[CELL_LABEL].iloc[cell_idx]
         
         # Check if CSV has new format with path columns
-        img_cols = [col for col in pos_df.columns if col.endswith('_path') and 'img' in col]
-        mask_cols = [col for col in pos_df.columns if col.endswith('_path') and 'mask' in col]
+        # img_cols = [col for col in pos_df.columns if col.endswith('_path') and 'img' in col]
+        # mask_cols = [col for col in pos_df.columns if col.endswith('_path') and 'mask' in col]
+        img_cols = []
+        mask_cols = []
         
         if img_cols and mask_cols:
             # New format: extract paths from CSV
             img_paths = []
+            refseg_paths = []
             mask_paths = []
             
             # Extract paths for this cell
@@ -212,21 +217,100 @@ class DataLoader:
                 path_value = pos_df[col].iloc[cell_idx]
                 if pd.notna(path_value):
                     mask_paths.append(Path(path_value))
+
+            # Keep refseg aligned with measure images for legacy CSV path mode.
+            refseg_paths = img_paths
             
-            return CellImageSet(cell_centroid, img_paths, mask_paths, cell_mask_value, self.crop_size)
+            return CellImageSet(cell_centroid, img_paths, mask_paths, refseg_paths, cell_mask_value, self.crop_size)
         
         else:
-            # Legacy format: build paths from fov_id
+            # Legacy format: discover files from current project structure.
             fov_id = pos_df[FOV_ID].iloc[cell_idx]
-            
-            # Build img and mask directories
+
+            img_paths = self._discover_tiff_paths(fov_id, img_label)
+            refseg_paths = self._discover_tiff_paths(fov_id, refseg_label)
+            mask_paths = self._discover_tiff_paths(fov_id, mask_label)
+
+            if img_paths and mask_paths:
+                if not refseg_paths:
+                    refseg_paths = img_paths
+                return CellImageSet(cell_centroid, img_paths, mask_paths, refseg_paths, cell_mask_value, self.crop_size)
+
+            # Fallback to old directory-based loading when no files were discovered.
             img_dir, mask_dir = self._build_image_mask_dirs(fov_id)
-            
-            # Build arrays file pre-paths (missing the frame number)
             pre_img_path = img_dir.joinpath(f"{fov_id}_{img_label}.tif")
+            pre_refseg_path = img_dir.joinpath(f"{fov_id}_{refseg_label}.tif")
             pre_mask_path = mask_dir.joinpath(f"{fov_id}_{mask_label}.tif")
-            
-            return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, cell_mask_value, self.n_frames, self.crop_size)
+
+            return CellImageSet(cell_centroid, pre_img_path, pre_mask_path, pre_refseg_path, cell_mask_value, self.n_frames, self.crop_size)
+
+    def _discover_tiff_paths(self, fov_id: str, label: str) -> list[Path]:
+        """
+        Discover TIFF files from well-specific folders, with caching.
+
+        Expected filename format: {fov_id}_{label}_{frame}.tif(f), where label can
+        be 'measure', 'refseg', or 'mask'.
+        """
+        cache_key = (str(fov_id), label.lower())
+        if cache_key in self._tiff_path_cache:
+            return self._tiff_path_cache[cache_key]
+
+        base_path = self.csv_path.parent
+        fov_id = str(fov_id)
+        well_id = self._extract_well_id(fov_id)
+        label = label.lower()
+        frame_pattern = re.compile(
+            rf"^{re.escape(fov_id)}_{re.escape(label)}_(\d+)\.(?:tif|tiff)$",
+            re.IGNORECASE,
+        )
+
+        # New expected structure is <csv_parent>/well/<well>/<well>_images|<well>_masks.
+        suffix = 'masks' if label == 'mask' else 'images'
+        candidate_dirs = [
+            base_path.joinpath('well', well_id, f"{well_id}_{suffix}"),
+            base_path.joinpath(well_id, f"{well_id}_{suffix}"),
+        ]
+
+        discovered: list[tuple[int, Path]] = []
+        for candidate_dir in candidate_dirs:
+            if not candidate_dir.exists() or not candidate_dir.is_dir():
+                continue
+            for path in candidate_dir.iterdir():
+                if not path.is_file() or path.suffix.lower() not in TIFF_SUFFIXES:
+                    continue
+
+                match = frame_pattern.match(path.name)
+                if match is None:
+                    continue
+
+                discovered.append((int(match.group(1)), path))
+
+            if discovered:
+                break
+
+        # Fallback for compatibility with unexpected layouts.
+        if not discovered:
+            for path in base_path.rglob(f"{fov_id}_{label}_*"):
+                if not path.is_file() or path.suffix.lower() not in TIFF_SUFFIXES:
+                    continue
+
+                match = frame_pattern.match(path.name)
+                if match is None:
+                    continue
+
+                discovered.append((int(match.group(1)), path))
+
+        discovered.sort(key=lambda item: item[0])
+        result = [path for _, path in discovered]
+        self._tiff_path_cache[cache_key] = result
+        return result
+
+    @staticmethod
+    def _extract_well_id(fov_id: str) -> str:
+        """Extract well ID from fov_id for both old and new naming formats."""
+        if '_P' in fov_id:
+            return fov_id.split('_P')[0]
+        return fov_id.split('P')[0]
 
     def _build_image_mask_dirs(self, fov_id: str) -> tuple[Path, Path]:
         """
