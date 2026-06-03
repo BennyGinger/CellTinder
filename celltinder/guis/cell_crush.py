@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import math
 import sys
 from typing import Any, cast
 
@@ -85,8 +86,18 @@ class CellCrush():
 
     def _init_shortcuts(self) -> None:
         self._sc_manager = ShortcutManager(cast(Any, self))
+
+    def _format_ref_value(self, value: Any) -> str:
+        """Format numeric reference values with 2 decimals; keep non-numeric as-is."""
+        try:
+            num = float(value)
+            if math.isnan(num):
+                return '?'
+            return f"{num:.2f}"
+        except (TypeError, ValueError):
+            return str(value)
     
-    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int, float, float, float, str]:
+    def _gather_info(self, idx: int | None = None) -> tuple[float, bool, int, float, float, float, str, str, str]:
         """
         Gather information about the current cell.
         """
@@ -104,7 +115,19 @@ class CellCrush():
             cell_id = str(self.df['CELL_ID'].iat[idx])
         else:
             cell_id = str(self.df.index[idx])
-        return ratio, processed, selected_count, before, after, ff0, cell_id
+        before_ref = '?'
+        if 'before_ref' in self.df.columns:
+            before_ref = self._format_ref_value(self.df['before_ref'].iat[idx])
+        elif 'BEFORE_REF' in self.df.columns:
+            before_ref = self._format_ref_value(self.df['BEFORE_REF'].iat[idx])
+
+        after_ref = '?'
+        if 'after_ref' in self.df.columns:
+            after_ref = self._format_ref_value(self.df['after_ref'].iat[idx])
+        elif 'AFTER_REF' in self.df.columns:
+            after_ref = self._format_ref_value(self.df['AFTER_REF'].iat[idx])
+
+        return ratio, processed, selected_count, before, after, ff0, cell_id, before_ref, after_ref
 
     def _refresh_info(self, *, preview: bool = False) -> None:
         """
@@ -112,7 +135,7 @@ class CellCrush():
         Args:
             preview (bool): If True, updates the info without moving the slider.
         """
-        ratio, processed, selected_count, before, after, ff0, cell_id = self._gather_info()
+        ratio, processed, selected_count, before, after, ff0, cell_id, before_ref, after_ref = self._gather_info()
         self.view.content_area.update_info(
             self.current_idx,
             self.total_cells,
@@ -122,6 +145,8 @@ class CellCrush():
             before,
             after,
             ff0,
+            before_ref,
+            after_ref,
             cell_id,
             preview=preview,
         )

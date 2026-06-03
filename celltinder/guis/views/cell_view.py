@@ -230,6 +230,10 @@ class ContentAreaWidget(QWidget):
         self.cell_ratio_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.ff0_label = QLabel("F-F0: ?")
         self.ff0_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.before_ref_label = QLabel("before_ref: ?")
+        self.before_ref_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.after_ref_label = QLabel("after_ref: ?")
+        self.after_ref_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.cell_id_label = QLabel("cell_id: ?")
         self.cell_id_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -280,6 +284,8 @@ class ContentAreaWidget(QWidget):
         left_layout.addWidget(self.after_label)
         left_layout.addWidget(self.cell_ratio_label)
         left_layout.addWidget(self.ff0_label)
+        left_layout.addWidget(self.before_ref_label)
+        left_layout.addWidget(self.after_ref_label)
         left_layout.addWidget(self.cell_id_label)
         left_layout.addStretch()
         self.split_layout.addWidget(self.left_panel)
@@ -474,6 +480,8 @@ class ContentAreaWidget(QWidget):
         before: float,
         after: float,
         ff0: float,
+        before_ref: str,
+        after_ref: str,
         cell_id: str,
         *,
         preview: bool = False,
@@ -496,6 +504,8 @@ class ContentAreaWidget(QWidget):
         self.after_label .setText(f"After:  {after:.2f}")
         self.cell_ratio_label.setText(f"Ratio: {cell_ratio:.2f}")
         self.ff0_label.setText(f"F-F0: {ff0:.2f}")
+        self.before_ref_label.setText(f"before_ref: {before_ref}")
+        self.after_ref_label.setText(f"after_ref: {after_ref}")
         self.cell_id_label.setText(f"cell_id: {cell_id}")
         self.selected_cells_value_label.setText(str(selected_count))
 
